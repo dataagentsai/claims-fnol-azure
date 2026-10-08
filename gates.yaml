@@ -1,0 +1,57 @@
+# How the gates reach this implementation (clean-ai-engineering/tools/gates.py).
+#
+# Everything here is about *this* build; what it is measured against is the
+# yardstick, in clean-ai-engineering/gates/motor-claims-fnol.yaml.
+apiVersion: gates/v0
+agent: motor-claims-fnol
+aoas: ../clean-ai-engineering/drafts/examples/motor-claims-fnol.aoas.yaml
+profile: harness-profile.yaml
+
+# `agenttwin.Binding`: `(live, *, wrap, clock, model) -> Subject`.
+binding: evals.gate_binding:open_subject
+
+tests:
+  # Each test carries its `discharges` ids as JUnit properties (tests/conftest.py).
+  command: uv run python -m pytest -q -p no:cacheprovider --junitxml={junit}
+
+structure:
+  checks:
+    types: uv run mypy
+    imports: uv run lint-imports
+    complexity: uv run ruff check src tests evals
+  # One module per harness layer (AHC taxonomy/layers.yaml). The engine of every
+  # layer is the installed library, agent_harness — named where it lives, in the
+  # reference agent's checkout this project depends on by path — and a layer
+  # whose values are this agent's names its own module beside it.
+  layers:
+    L1: ../reference-agent/packages/agent-harness/src/agent_harness/context
+    L2: ../reference-agent/packages/agent-harness/src/agent_harness/llm
+    L3: ../reference-agent/packages/agent-harness/src/agent_harness/tools
+    L4:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/loop
+      - src/claims_fnol/router
+    L5: ../reference-agent/packages/agent-harness/src/agent_harness/state
+    L6:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/contracts
+      - src/claims_fnol/contracts
+    L7:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/policy
+      - src/claims_fnol/policy
+    L8: ../reference-agent/packages/agent-harness/src/agent_harness/flow
+    L9: ../reference-agent/packages/agent-harness/src/agent_harness/cassette
+    L10: ../reference-agent/packages/agent-harness/src/agent_harness/resilience
+    L11:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/telemetry
+      - src/claims_fnol/telemetry
+    L12:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/entrypoint
+      - src/claims_fnol/entrypoint
+    L13: ../reference-agent/packages/agent-harness/src/agent_harness/cost
+    L14:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/approvals
+      - src/claims_fnol/approvals
+      - src/claims_fnol/escalation
+    L15:
+      - ../reference-agent/packages/agent-harness/src/agent_harness/config
+      - src/claims_fnol/config
+    L16: ../reference-agent/packages/agent-harness/src/agent_harness/identity

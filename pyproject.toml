@@ -1,0 +1,152 @@
+[project]
+name = "claims-fnol"
+version = "0.1.0"
+description = "A motor insurer's claims agent (first notice of loss): this domain's seams on the agent_harness library."
+requires-python = ">=3.13"
+dependencies = [
+    # The harness, installed — never copied (T-019, T-099). Everything that is
+    # mechanism is there; this package holds only what is this insurer's.
+    "agent-harness[azure]",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "pyyaml>=6.0",
+    # Imported by agent_harness.context and not declared by agent-harness: the
+    # reference agent declared it at its root, so the library never needed to
+    # (FINDINGS F-1). Declared here until the library does.
+    "jinja2>=3.1",
+    # The approval wait is the harness's Temporal workflow; this agent's payout
+    # activities are the one module here that speaks Temporal (see the import
+    # contracts below). Pinned to the version whose test server is cached, so a
+    # gate run never downloads one.
+    "temporalio==1.33.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # A dev dependency only: the import contract below forbids the agent from
+    # importing its simulator at all.
+    "agenttwin",
+    "import-linter>=2.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.13",
+]
+
+[tool.uv.sources]
+# Local paths while the three repositories move together, as the reference does.
+agent-harness = { path = "../reference-agent/packages/agent-harness", editable = true }
+agenttwin = { path = "../agenttwin", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claims_fnol"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "possibly-undefined", "exhaustive-match"]
+files = ["src/claims_fnol"]
+
+[[tool.mypy.overrides]]
+# The library is checked in its own repository, under the same strictness.
+module = ["agent_harness.*"]
+follow_imports = "silent"
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TID", "C901", "PLR0912", "PLR0915"]
+
+# The same ceilings as the reference agent's, so the second agent is held to
+# the first one's complexity budget rather than a looser one.
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.pylint]
+max-statements = 24
+max-branches = 7
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["C901", "PLR0912", "PLR0915"]
+"evals/**" = ["C901", "PLR0912", "PLR0915"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+asyncio_mode = "auto"
+markers = [
+    "discharges(*ids): statement ids this test verifies",
+    "unwired: tests a component the agent never calls — its ids are not counted",
+]
+
+# ---------------------------------------------------------------------------
+# Architecture, enforced. Arrows point down; the harness never sees the agent.
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["claims_fnol", "agent_harness"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+# The second agent's half of T-019: the library is installed by this agent and
+# must never import it back, or every third agent installs this one too.
+name = "The harness never imports this agent"
+type = "forbidden"
+source_modules = ["agent_harness"]
+forbidden_modules = ["claims_fnol"]
+
+[[tool.importlinter.contracts]]
+name = "Arrows point down"
+type = "layers"
+containers = ["claims_fnol"]
+layers = [
+    "entrypoint",
+    "router",
+    "approvals | escalation",
+    "binding",
+    "policy | config",
+    "telemetry",
+    "contracts",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
+name = "The agent cannot see its simulator"
+type = "forbidden"
+source_modules = ["claims_fnol"]
+forbidden_modules = ["agenttwin"]
+
+[[tool.importlinter.contracts]]
+# The agent reaches a model only through the harness's `llm` port.
+name = "The agent knows no provider SDK"
+type = "forbidden"
+source_modules = ["claims_fnol"]
+forbidden_modules = ["openai", "anthropic", "groq", "pydantic_ai"]
+
+[[tool.importlinter.contracts]]
+name = "The agent speaks MCP only through the harness"
+type = "forbidden"
+source_modules = ["claims_fnol"]
+forbidden_modules = ["mcp", "psycopg"]
+
+[[tool.importlinter.contracts]]
+# The payout's activities run in the approvals worker; nothing else here waits.
+name = "Only the payout activities know Temporal"
+type = "forbidden"
+source_modules = ["claims_fnol"]
+forbidden_modules = ["temporalio"]
+ignore_imports = [
+    "claims_fnol.approvals.payout -> temporalio",
+    # The library's own waits know it; its contract holds that line inside.
+    "agent_harness.approvals.* -> temporalio",
+    "agent_harness.approvals.* -> temporalio.*",
+    "agent_harness.escalation.* -> temporalio",
+    "agent_harness.escalation.* -> temporalio.*",
+]
+unmatched_ignore_imports_alerting = "none"
