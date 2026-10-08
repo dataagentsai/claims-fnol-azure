@@ -1,0 +1,20 @@
+# P-OPEN: opening a conversation shows the policyholder's own open claims and
+# active policies, with no model call (no model block: a call would raise).
+apiVersion: awd-scenario/v0
+scenario: a policyholder opens the chat and is shown their open claims and policies
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: >-
+  Opening shows the policyholder their own open claims and active policies, so
+  the first turn is not spent finding a reference, and it costs no model call.
+concern: cost
+discharges: [P-OPEN, P-OWNERSHIP, op:list_claims, op:list_policies, ext:claims_system]
+max_turns: 1
+actor:
+  opens: true
+expect:
+  - {world: unchanged}
+  - {reply: says, text: CLM-010005}
+  - {reply: says, text: documents pending}
+  - {reply: says, text: POL-010001}
+  - {reply: never_says, text: [CLM-010002, CLM-010008, CLM-019001, POL-019001, POL-010002]}

@@ -1,0 +1,21 @@
+# P-ESC-TTL, P-ESC-LAPSE: a queued escalation nobody comes to lapses after its
+# ttl (30m), the conversation returns, and the policyholder is told nobody came.
+apiVersion: awd-scenario/v0
+scenario: nobody picks up the escalation, and the policyholder is told
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: The desk never comes. The conversation returns to the agent, and nothing is promised.
+concern: reliability
+discharges: [P-ESC-TTL, P-ESC-LAPSE, P-ESC-TOLD, esc:asked-for-human, op:escalate, ext:escalation_desk]
+max_turns: 2
+step_seconds: 1860
+actor:
+  says:
+    - I want to talk to a person
+    - any update?
+desk:
+  resolves: never
+expect:
+  - {world: unchanged}
+  - {reply: says, text: [nobody, no one]}
+  - {reply: never_says, text: has resolved}

@@ -1,0 +1,25 @@
+# esc:repeated-intent — the same ask three times without resolution fetches a person.
+apiVersion: awd-scenario/v0
+scenario: asking for the same thing three times fetches a person
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: Three asks to withdraw a claim, naming none, and a person takes over.
+concern: interaction-capability
+discharges: [esc:repeated-intent, op:escalate, ext:escalation_desk]
+max_turns: 4
+step_seconds: 600
+actor:
+  says:
+    - I want to withdraw my claim
+    - I want to withdraw my claim
+    - I want to withdraw my claim
+    - please
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 1}
+  - {effect: withdraw_claim, times: 0}
+  - {world: unchanged}
+model:
+  - says: Which claim would you like to withdraw? Please give me its reference.
+    times: 30

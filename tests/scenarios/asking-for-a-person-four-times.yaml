@@ -1,0 +1,24 @@
+# P-ESC-CAP: at most two escalations per conversation; past the cap something
+# true instead of another reference. P-ESC-ONCE: an on_request rule may fire
+# again once what it raised has closed.
+apiVersion: awd-scenario/v0
+scenario: four asks for a person, and the cap holds at two
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: Past the cap of two the agent says something true instead of issuing another reference.
+concern: interaction-capability
+discharges: [P-ESC-CAP, P-ESC-ONCE, esc:asked-for-human, op:escalate, ext:escalation_desk]
+max_turns: 4
+step_seconds: 60
+actor:
+  says:
+    - I want to talk to a person
+    - I want to talk to a person
+    - I want to talk to a person
+    - I want to talk to a person
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 2}
+  - {reply: says, text: already with a colleague}
+  - {world: unchanged}

@@ -1,0 +1,26 @@
+# esc:second-refusal — two refusals, no ask for a person, and a person takes
+# it. P-ESC-OUTCOME: the desk closes it with an outcome from the declared set.
+apiVersion: awd-scenario/v0
+scenario: a policyholder refused twice is handed to a person without asking
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: Two refusals, no request for a person, and a person ends up holding the conversation.
+concern: interaction-capability
+discharges: [esc:second-refusal, P-ESC-OUTCOME, R-COVERAGE, R-LIABILITY, op:escalate, ext:escalation_desk]
+max_turns: 3
+step_seconds: 600
+actor:
+  says:
+    - Will my claim be approved?
+    - Was the other driver at fault?
+    - fine, what can you do
+desk:
+  resolves: handled
+  by: claims-desk-2
+expect:
+  - {handed_off: 1}
+  - {world: unchanged}
+  - {reply: never_says, text: [will be approved, was at fault]}
+model:
+  - says: I can tell you the status of a claim or policy, report a new claim, or add a document.
+    times: 6

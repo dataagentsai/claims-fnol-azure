@@ -1,0 +1,32 @@
+# esc:turns-exceeded — ten turns without resolving fetch a person unasked.
+apiVersion: awd-scenario/v0
+scenario: a conversation that runs long fetches a person on its own
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: Ten turns of small talk, and a person picks it up unasked.
+concern: interaction-capability
+discharges: [esc:turns-exceeded, P-ESC-ONCE, op:escalate, ext:escalation_desk]
+max_turns: 12
+step_seconds: 600
+actor:
+  says:
+    - hello
+    - I just have a general question
+    - how does this chat work
+    - ok
+    - thanks for that
+    - and one more
+    - sorry, give me a second
+    - right
+    - hmm
+    - one moment
+    - ok then
+    - bye
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 1}
+  - {world: unchanged}
+model:
+  - says: Hello — I can help with your claims and policies.
+    times: 30

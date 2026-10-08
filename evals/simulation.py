@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from typing import Any
 
 from agent_harness.cost import Meter
@@ -26,7 +27,16 @@ from agenttwin import Approver, Desk, Live, Subject, project
 from claims_fnol import entrypoint as ep
 from claims_fnol.binding import POLICYHOLDER_SCOPES, SCOPES, SESSION_FIELD
 from claims_fnol.config import RunConfig
-from claims_fnol.contracts import Clock, Identity, LLMClient
+from claims_fnol.contracts import (
+    Clock,
+    Identity,
+    LLMClient,
+    ModelMalformed,
+    ModelRequest,
+    ModelResponse,
+    ModelThrottled,
+    ModelUnavailable,
+)
 from evals import durable
 
 SESSION_META = "aoas/session"
@@ -38,6 +48,39 @@ DECISIONS = {
     "grant-twice": Approver.grants_twice,
 }
 RESOLUTIONS = {"handled": Desk.answers, "never": Desk.never_comes}
+
+
+@dataclass
+class FaultyProvider:
+    """A model client that misbehaves on the calls a scenario named — the
+    in-process twin of the provider twin's faults. Copied from the reference
+    agent's `evals/simulation.py` (FINDINGS F-3): mechanism, outside the library."""
+
+    inner: LLMClient
+    faults: dict[int, tuple[str, float | None, int]]
+    clock: Clock | None = None
+    calls: int = 0
+    fired: list[int] = field(default_factory=list)
+    outage: tuple[str, float | None, int] | None = None
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        now = self.clock() if self.clock is not None else 0
+        fault = self.faults.get(self.calls)
+        if fault is not None:
+            self.fired.append(self.calls)
+            kind, retry_after, lasts_s = fault
+            if lasts_s:
+                self.outage = (kind, retry_after, now + lasts_s)
+        elif self.outage is not None and now < self.outage[2]:
+            kind, retry_after, _ = self.outage
+        else:
+            return await self.inner.complete(request)
+        if kind == "provider_throttled":
+            raise ModelThrottled("the provider is rate limiting", retry_after=retry_after)
+        if kind == "provider_unavailable":
+            raise ModelUnavailable("the provider could not be reached")
+        raise ModelMalformed("the provider returned something unreadable", raw="{not json")
 
 
 async def as_policyholder(
@@ -67,6 +110,7 @@ async def subject_for(
     clock: Clock | None = None,
     wrap: object = None,
     config: RunConfig | None = None,
+    provider_faults: tuple[tuple[int, str, float | None, int], ...] = (),
 ) -> AsyncIterator[Subject]:
     """Wire this agent against a live world and hand back what a scenario drives.
 
@@ -77,6 +121,9 @@ async def subject_for(
         def metering() -> Meter:  # noqa: F811
             return Meter(config.model, ceiling_usd=config.budgets.max_cost_usd)
 
+    if provider_faults:
+        faults = {call: (kind, after, lasts) for call, kind, after, lasts in provider_faults}
+        llm = FaultyProvider(llm, faults, clock=clock)
     llm = ResilientLLM(llm)  # wrapped exactly as the deployment wraps it (F-029)
     world = project(
         live, scopes=SCOPES, wrap=wrap, authorise=as_policyholder, unknown_record="result"
@@ -122,4 +169,4 @@ async def subject_for(
         yield Subject(say=say, reviewer=reviewer, colleague=colleague, opens=opens)
 
 
-__all__ = ["as_policyholder", "policyholder", "subject_for"]
+__all__ = ["FaultyProvider", "as_policyholder", "policyholder", "subject_for"]

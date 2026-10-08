@@ -1,0 +1,35 @@
+# Q-STEPS — at most 12 loop steps a turn, enforced by the harness; a trajectory
+# that spends them fetches a person (esc:loop-exhausted).
+apiVersion: awd-scenario/v0
+scenario: the loop spends its twelve steps and hands over
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: The step budget is enforced by the harness, and a trajectory that exhausts it fetches a person.
+concern: cost
+forces: a model that keeps calling tools until the step budget runs out
+discharges: [Q-STEPS, esc:loop-exhausted, AHC-0041, AHC-0042, op:get_claim, ext:escalation_desk]
+max_turns: 1
+step_seconds: 300
+actor:
+  says:
+    - where are CLM-010001, CLM-010003 and CLM-010005?
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 1}
+  - {world: unchanged}
+model:
+  - calls: [{get_claim: {id: CLM-010001}}]
+  - calls: [{get_claim: {id: CLM-010002}}]
+  - calls: [{get_claim: {id: CLM-010003}}]
+  - calls: [{get_claim: {id: CLM-010004}}]
+  - calls: [{get_claim: {id: CLM-010005}}]
+  - calls: [{get_claim: {id: CLM-010006}}]
+  - calls: [{get_claim: {id: CLM-010007}}]
+  - calls: [{get_claim: {id: CLM-010008}}]
+  - calls: [{get_policy: {id: POL-010001}}]
+  - calls: [{get_policy: {id: POL-010002}}]
+  - calls: [{get_policy: {id: POL-010003}}]
+  - calls: [{get_policy: {id: POL-010004}}]
+  - calls: [{list_claims: {}}]
+  - calls: [{list_policies: {}}]

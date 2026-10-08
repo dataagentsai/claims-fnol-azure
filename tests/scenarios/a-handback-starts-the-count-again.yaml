@@ -1,0 +1,29 @@
+# P-ESC-FRESH: after a handback, the facts on_condition rules read count only
+# turns since the return; P-ESC-ONCE: the rule may fire again from the return.
+apiVersion: awd-scenario/v0
+scenario: after a handback, two fresh failures fetch a person again
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: >-
+  The model is unreachable for four turns. A person is fetched after the second,
+  hands it back, and is fetched again after the fourth — two fresh failures.
+concern: reliability
+discharges: [P-ESC-FRESH, P-ESC-ONCE, P-ESC-CAP, esc:tool-unavailable]
+max_turns: 4
+step_seconds: 600
+actor:
+  says:
+    - I need some help please
+    - are you still there
+    - hello?
+    - is anyone there
+perturbations:
+  - {kind: provider_unavailable, at_call: 1, lasts_s: 7200}
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 2}
+  - {world: unchanged}
+model:
+  - says: Hello — I can help with your claims and policies.
+    times: 30

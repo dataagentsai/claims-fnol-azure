@@ -1,0 +1,21 @@
+# esc:asked-for-human — the policyholder asks, and a person takes it, with a
+# reference and no promised time (P-ESC-TOLD). No model call.
+apiVersion: awd-scenario/v0
+scenario: asking for a person hands the conversation over with a reference
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: A person takes the conversation at once and the policyholder is told the reference.
+concern: interaction-capability
+discharges: [esc:asked-for-human, P-ESC-TOLD, op:escalate, ext:escalation_desk]
+max_turns: 1
+step_seconds: 60
+actor:
+  says:
+    - I want to talk to a person about my claim
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 1}
+  - {reply: says, text: reference}
+  - {reply: never_says, text: [minutes, within, shortly, soon]}
+  - {world: unchanged}

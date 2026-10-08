@@ -1,0 +1,26 @@
+# P-APPROVAL-FINAL — a decided approval cannot be decided again: granted twice,
+# paid once.
+apiVersion: awd-scenario/v0
+scenario: the claims handler approves a payout twice and it is paid once
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: The handler grants, then grants again; the queue refuses the second and the claim is paid once.
+concern: safety
+discharges: [P-APPROVAL-FINAL, P-APPROVAL-QUEUE, P-PAYOUT, op:issue_payout, op:request_payout, ext:approval_queue, AHC-0057]
+max_turns: 3
+step_seconds: 60
+actor:
+  says:
+    - Please release the payment for CLM-010004
+    - any update?
+    - thank you
+approver:
+  decides: grant-twice
+expect:
+  - {decided: refused}
+  - {effect: issue_payout, key: CLM-010004, times: 1}
+  - {row: claim, id: CLM-010004, field: status, equals: paid}
+model:
+  - calls: [{request_payout: {id: CLM-010004}}]
+  - says: Let me check on that for you.
+    times: 6

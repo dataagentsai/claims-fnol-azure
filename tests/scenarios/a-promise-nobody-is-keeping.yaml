@@ -1,0 +1,27 @@
+# AHC-0106, esc:unbacked-commitment — a reply that commits to future work with
+# nothing doing it does not end as a completed answer: a person takes it.
+apiVersion: awd-scenario/v0
+scenario: the agent promises to check and something has to be checking
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: A model that commits to future work and calls nothing must not end the turn as a completed answer.
+concern: functional-suitability
+forces: a model that promises to check and calls nothing
+discharges: [AHC-0106, esc:unbacked-commitment, op:escalate, ext:escalation_desk]
+max_turns: 3
+step_seconds: 300
+actor:
+  says:
+    - Please release the payment for CLM-010001
+    - any update?
+    - hello?
+desk:
+  resolves: handled
+expect:
+  - {effect: issue_payout, times: 0}
+  - {world: unchanged}
+  - {handed_off: 2}
+  - {reply: never_says, text: [Let me check, has been paid]}
+model:
+  - says: Let me check on that for you.
+    times: 6

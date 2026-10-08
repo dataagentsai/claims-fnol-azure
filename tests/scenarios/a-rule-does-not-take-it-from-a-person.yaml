@@ -1,0 +1,30 @@
+# P-ESC-TIER1 — a Tier 2 rule never replaces a handoff the conversation already
+# has: a pending payout approval is not withdrawn by repeated asking.
+apiVersion: awd-scenario/v0
+scenario: asking four times while a payout approval is pending fetches nobody
+world: ../../../clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml
+as: PH-1001
+objective: The policyholder repeats themselves into a Tier 2 condition while a claims handler holds the payout.
+concern: reliability
+discharges: [P-ESC-TIER1, P-APPROVAL-WAIT, P-APPROVAL-QUEUE, op:request_payout, ext:approval_queue, AHC-0057]
+max_turns: 4
+step_seconds: 60
+actor:
+  says:
+    - Please release the payment for CLM-010004
+    - Please release the payment for CLM-010004
+    - Please release the payment for CLM-010004
+    - Please release the payment for CLM-010004
+approver:
+  decides: never
+desk:
+  resolves: handled
+expect:
+  - {handed_off: 0}
+  - {decided: waiting}
+  - {effect: issue_payout, times: 0}
+  - {world: unchanged}
+model:
+  - calls: [{request_payout: {id: CLM-010004}}]
+  - says: Let me check on that for you.
+    times: 6
