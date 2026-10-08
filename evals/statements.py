@@ -4,8 +4,8 @@
 |---|---|---|
 | `AAC-0106` | assurance catalog | the sibling `ai-assurance-catalog/catalog` |
 | `AHC-0057` | harness catalog | the sibling `ai-harness-catalog/capabilities` |
-| `P-PAYOUT`, `R-COVERAGE`, `Q-STEPS` | this agent's AOAS — policies, refusals, properties | its spec |
-| `op:…`, `esc:…`, `ext:…`, `fact:…` | its operations, escalation rules, externals, facts | its spec |
+| `P-PAYOUT`, `R-COVERAGE`, `Q-STEPS` | the AOAS: policies, refusals, properties | its spec |
+| `op:…`, `esc:…`, `ext:…`, `fact:…` | its operations, rules, externals, facts | its spec |
 
 An unknown id fails collection: a tag that names nothing reads as coverage and
 verifies nothing.
@@ -33,7 +33,7 @@ def aoas() -> dict[str, object]:
 def aoas_ids(spec: dict | None = None) -> set[str]:
     spec = spec or aoas()
     ids: set[str] = {r["id"] for r in spec["purpose"]["refuses"]}
-    for key, value in spec["policies"].items():
+    for key in spec["policies"]:
         if key.startswith("P-"):
             ids.add(key)
     ids |= {s["id"] for s in spec["policies"]["approval"]["statements"]}

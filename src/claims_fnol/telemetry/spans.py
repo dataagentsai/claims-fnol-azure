@@ -7,7 +7,10 @@ and the promise gate — so they are this agent's to declare.
 
 from __future__ import annotations
 
+import re
+
 from agent_harness import telemetry
+from agent_harness.telemetry import redaction
 from agent_harness.telemetry.contract import SpanSpec, declare
 from agent_harness.telemetry.names import ROUTE_KIND, ROUTE_REASON, TENANT
 
@@ -31,7 +34,20 @@ SPANS: dict[str, SpanSpec] = {
 SCOPE = "claims_fnol"
 SERVICE = "claims-fnol"
 
+REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(?i)\b[A-Z]{2}[- ]?\d{2}[- ]?\d{4}[- ]?\d{7}\b"), "[licence]"),
+    (re.compile(r"\b\d{9,18}\b"), "[account]"),
+)
+"""AOAS `personal_data_in_conversation`: driving licence and bank account numbers
+typed into the chat, replaced before anything is exported (AHC-0019). The
+harness's own patterns (cards, emails, phones, secrets) run first.
+
+The harness offers no way to declare these: its patterns are a private module
+tuple, so they are extended here by rebinding it (FINDINGS F-10)."""
+
 telemetry.identify(scope=SCOPE, service=SERVICE)
 declare(SPANS)
+if REDACTIONS[0] not in redaction._REDACTIONS:
+    redaction._REDACTIONS = (*redaction._REDACTIONS, *REDACTIONS)
 
-__all__ = ["SCOPE", "SERVICE", "SPANS"]
+__all__ = ["REDACTIONS", "SCOPE", "SERVICE", "SPANS"]

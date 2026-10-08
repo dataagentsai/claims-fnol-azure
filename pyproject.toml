@@ -75,7 +75,8 @@ max-statements = 24
 max-branches = 7
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["C901", "PLR0912", "PLR0915"]
+# Tables in tests read one case to a line, however long the case.
+"tests/**" = ["C901", "PLR0912", "PLR0915", "E501"]
 "evals/**" = ["C901", "PLR0912", "PLR0915"]
 
 [tool.pytest.ini_options]

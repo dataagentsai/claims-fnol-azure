@@ -18,11 +18,18 @@ from agent_harness.state import InMemoryCheckpointStore
 from agent_harness.tools import connect
 from agenttwin import Live, load, project
 from evals.scripted import SCENARIOS
-from evals.simulation import as_policyholder, policyholder
+from evals.simulation import Entities, as_policyholder, entities_of, policyholder
 
 from claims_fnol import entrypoint as ep
 from claims_fnol.binding import SCOPES
-from claims_fnol.contracts import Identity, ModelResponse, ToolCall, ToolClient, Usage
+from claims_fnol.contracts import (
+    Identity,
+    LLMClient,
+    ModelResponse,
+    ToolCall,
+    ToolClient,
+    Usage,
+)
 
 WORLD = SCENARIOS.parent / "worlds" / "motor-claims-fnol.yaml"
 AOAS = Path(__file__).resolve().parents[2] / (
@@ -55,20 +62,25 @@ def says(text: str = "", *calls: tuple[str, dict[str, object]], out: int = 2) ->
 @asynccontextmanager
 async def claims_system(world: Live | None = None) -> AsyncIterator[ToolClient]:
     """The projected claims system, as the agent's tool client sees it."""
-    server = project(
-        world or live(), scopes=SCOPES, authorise=as_policyholder, unknown_record="result"
-    )
+    world = world or live()
+    server = project(world, scopes=SCOPES, authorise=as_policyholder, unknown_record="result")
     async with connect(server, requests=InMemoryRequests()) as tools:
-        yield tools
+        yield Entities(tools, entities_of(world))
 
 
 @asynccontextmanager
 async def agent(
-    answers: Iterable[ModelResponse] = (), *, world: Live | None = None, **build: Any
+    answers: Iterable[ModelResponse] = (),
+    *,
+    world: Live | None = None,
+    llm: LLMClient | None = None,
+    **build: Any,
 ) -> AsyncIterator[tuple[ep.Agent, ScriptedClient]]:
     """The agent on the world, with a scripted model and no approval or escalation
     store unless one is passed (an empty script raises if the model is called)."""
-    llm = ScriptedClient(answers)
+    scripted = ScriptedClient(answers)
     async with claims_system(world) as tools:
-        built = ep.build(llm=llm, tools=tools, store=InMemoryCheckpointStore(), **build)
-        yield built, llm
+        built = ep.build(
+            llm=llm or scripted, tools=tools, store=InMemoryCheckpointStore(), **build
+        )
+        yield built, scripted

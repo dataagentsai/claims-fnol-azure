@@ -29,6 +29,7 @@ from claims_fnol.binding import POLICYHOLDER_SCOPES, SCOPES, SESSION_FIELD
 from claims_fnol.config import RunConfig
 from claims_fnol.contracts import (
     Clock,
+    IdempotencyKey,
     Identity,
     LLMClient,
     ModelMalformed,
@@ -36,6 +37,9 @@ from claims_fnol.contracts import (
     ModelResponse,
     ModelThrottled,
     ModelUnavailable,
+    ToolClient,
+    ToolRegistry,
+    ToolResult,
 )
 from evals import durable
 
@@ -81,6 +85,47 @@ class FaultyProvider:
         if kind == "provider_unavailable":
             raise ModelUnavailable("the provider could not be reached")
         raise ModelMalformed("the provider returned something unreadable", raw="{not json")
+
+
+@dataclass
+class Entities:
+    """The projected claims system, with each operation's entity declared.
+
+    The harness's MCP client reads a tool's `entity` from its `_meta`, and the
+    freshness re-read picks the reader of *that kind of row* by it (AHC-0107).
+    AgentTwin's projection publishes no `entity`, so on this two-entity surface
+    the harness fell back to the first read on the list — re-read a claim with
+    `get_policy`, got "no policy CLM-010005", and took the answer as fresh
+    (FINDINGS F-11). Declared here, at the binding, from the world's own actions.
+    """
+
+    inner: ToolClient
+    entities: Mapping[str, str]
+
+    async def list_tools(self, identity: Identity) -> ToolRegistry:
+        registry = await self.inner.list_tools(identity)
+        declared = tuple(
+            t.model_copy(update={"entity": self.entities.get(t.name, t.entity)})
+            for t in registry.tools
+        )
+        return registry.model_copy(update={"tools": declared})
+
+    async def call(
+        self,
+        name: str,
+        arguments: dict[str, object],
+        identity: Identity,
+        idempotency_key: IdempotencyKey,
+    ) -> ToolResult:
+        return await self.inner.call(name, arguments, identity, idempotency_key)
+
+
+def entities_of(live: Live) -> dict[str, str]:
+    return {
+        name: action.entity
+        for system in live.world.systems.values()
+        for name, action in system.actions.items()
+    }
 
 
 async def as_policyholder(
@@ -130,43 +175,61 @@ async def subject_for(
     )
     async with (
         durable.server(clock) as waits,
-        connect(world, requests=InMemoryRequests()) as tools,
-        waits.worker(tools),
+        connect(world, requests=InMemoryRequests()) as projected,
     ):
-        approvals, escalations = waits.approvals, waits.escalations
-        agent = ep.build(
-            llm=llm,
-            tools=tools,
-            store=InMemoryCheckpointStore(),
-            approvals=approvals,
-            escalations=escalations,
-            clock=clock,
-            config=config,
-            metering=metering,
+        tools = Entities(projected, entities_of(live))
+        async with waits.worker(tools):
+            yield _subject(tools, waits, llm, clock, config, metering)
+
+
+def _subject(
+    tools: ToolClient,
+    waits: durable.Durable,
+    llm: LLMClient,
+    clock: Clock | None,
+    config: RunConfig | None,
+    metering: Any,
+) -> Subject:
+    """The agent, built on the wired tools and waits, as the three callables."""
+    approvals, escalations = waits.approvals, waits.escalations
+    agent = ep.build(
+        llm=llm,
+        tools=tools,
+        store=InMemoryCheckpointStore(),
+        approvals=approvals,
+        escalations=escalations,
+        clock=clock,
+        config=config,
+        metering=metering,
+    )
+
+    async def say(text: str, customer_id: str, conversation: object) -> tuple[str, Conversation]:
+        held = conversation if isinstance(conversation, Conversation) else None
+        result, held = await agent.handle(
+            text, identity=policyholder(customer_id), conversation=held
         )
+        reply = getattr(result, "reply", "") or getattr(result, "customer_message", "")
+        return reply, held
 
-        async def say(
-            text: str, customer_id: str, conversation: object
-        ) -> tuple[str, Conversation]:
-            held = conversation if isinstance(conversation, Conversation) else None
-            result, held = await agent.handle(
-                text, identity=policyholder(customer_id), conversation=held
-            )
-            reply = getattr(result, "reply", "") or getattr(result, "customer_message", "")
-            return reply, held
+    def reviewer(decision: str, by: str, delay_s: int = 0) -> Approver:
+        deciding = durable.decide(waits.desk)
+        return DECISIONS[decision](approvals, deciding, name=by, delay_s=delay_s)
 
-        def reviewer(decision: str, by: str, delay_s: int = 0) -> Approver:
-            deciding = durable.decide(waits.desk)
-            return DECISIONS[decision](approvals, deciding, name=by, delay_s=delay_s)
+    def colleague(resolution: str, by: str, delay_s: int = 0) -> Desk:
+        resolving = durable.resolving(waits.colleagues)
+        return RESOLUTIONS[resolution](escalations, resolving, name=by, delay_s=delay_s)
 
-        def colleague(resolution: str, by: str, delay_s: int = 0) -> Desk:
-            resolving = durable.resolving(waits.colleagues)
-            return RESOLUTIONS[resolution](escalations, resolving, name=by, delay_s=delay_s)
+    async def opens(customer_id: str) -> str:
+        return await agent.opening(policyholder(customer_id))
 
-        async def opens(customer_id: str) -> str:
-            return await agent.opening(policyholder(customer_id))
-
-        yield Subject(say=say, reviewer=reviewer, colleague=colleague, opens=opens)
+    return Subject(say=say, reviewer=reviewer, colleague=colleague, opens=opens)
 
 
-__all__ = ["FaultyProvider", "as_policyholder", "policyholder", "subject_for"]
+__all__ = [
+    "Entities",
+    "FaultyProvider",
+    "as_policyholder",
+    "entities_of",
+    "policyholder",
+    "subject_for",
+]
