@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims FNOL Plan</title>
+<style>
+:root{
+  --bg:#f7f7f5; --card:#ffffff; --ink:#1d1d1f; --muted:#5f6368; --line:#e3e3df;
+  --accent:#0f6cbd; --done:#1a7f37; --doing:#b26a00; --next:#0f6cbd; --later:#8250df;
+  --done-bg:#e8f5ec; --doing-bg:#fff4e0; --next-bg:#e7f0fb; --later-bg:#f3ecfd;
+  --code:#f0f0ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141518; --card:#1d1f23; --ink:#e8e8ea; --muted:#a0a4ab; --line:#2e3137;
+    --accent:#5aa7ff; --done:#4cc76a; --doing:#f0a640; --next:#5aa7ff; --later:#b48cff;
+    --done-bg:#16301f; --doing-bg:#3a2a10; --next-bg:#14263d; --later-bg:#2a1f3d; --code:#26282d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141518; --card:#1d1f23; --ink:#e8e8ea; --muted:#a0a4ab; --line:#2e3137;
+  --accent:#5aa7ff; --done:#4cc76a; --doing:#f0a640; --next:#5aa7ff; --later:#b48cff;
+  --done-bg:#16301f; --doing-bg:#3a2a10; --next-bg:#14263d; --later-bg:#2a1f3d; --code:#26282d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:1060px;margin:0 auto;padding:28px 16px 80px}
+h1{font-size:28px;margin:0 0 4px}
+h2{font-size:21px;margin:40px 0 10px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:6px 0 10px}
+.muted{color:var(--muted)}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+a{color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+.tbl{width:100%;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.done{color:var(--done);background:var(--done-bg)}
+.doing{color:var(--doing);background:var(--doing-bg)}
+.next{color:var(--next);background:var(--next-bg)}
+.later{color:var(--later);background:var(--later-bg)}
+.strip{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.strip a{flex:1 1 130px;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+.strip a b{display:block;font-size:14px}
+.strip .ph2{border-style:dashed}
+ul.tasks{margin:6px 0 8px;padding-left:20px}
+ul.tasks li{margin:3px 0}
+.dw{border-left:3px solid var(--accent);padding:4px 10px;margin:8px 0;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.tierhead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Motor claims FNOL agent on Azure: the plan</h1>
+<p class="muted">From where we are to "it runs end to end in Azure", then what comes after. Last updated <b>8 Oct 2026</b>. This page is updated as each tier finishes; the change log is at the bottom.</p>
+
+<div class="card">
+  <p><b>In one line:</b> build the agent, prove it on your Mac against the 29 scenarios, then deploy it to Azure on the free tier and walk through every resource yourself.</p>
+  <p><b>FNOL</b> = <i>first notice of loss</i>: the moment a policyholder first tells the insurer something happened ("a bus hit my car"). The agent registers the claim, gives a reference, answers status questions, and pays small payouts; anything bigger, or anyone hurt, goes to a person.</p>
+  <p><b>Goal of Phase 1:</b> you open a public URL, sign in as a test policyholder, report a collision, get a claim reference, and then see that conversation's trace in App Insights and the model call in APIM. <b>Phase 2</b> holds everything that makes it better but isn't needed to get there.</p>
+</div>
+
+<div class="strip">
+  <a href="#t0"><span class="pill done">Done</span><b>Tier 0</b>Specs + library</a>
+  <a href="#t1"><span class="pill next">Next</span><b>Tier 1</b>Passes the gates on the Mac</a>
+  <a href="#t2"><span class="pill next">Planned</span><b>Tier 2</b>Chat with it on the Mac</a>
+  <a href="#t3"><span class="pill next">Planned</span><b>Tier 3</b>Azure resources exist</a>
+  <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
+  <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
+  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–10</b>Router lanes, RAG, Chatwoot, cost, scale</a>
+</div>
+
+<h2>Can it be tested on the Mac?</h2>
+<p>Mostly yes. The agent's behaviour is tested locally first, so when something fails in Azure it is the wiring, not the agent. Only the Azure-managed services need Azure.</p>
+<div class="tbl"><table>
+<tr><th>Part</th><th>On your Mac</th><th>Needs Azure</th></tr>
+<tr><td>The agent: rules, refusals, the ₹25,000 limit, several asks in one message</td><td>✅ the same scenarios and four gates as the clothing agent</td><td>—</td></tr>
+<tr><td>Claims system (our small claims server)</td><td>✅ on the local PostgreSQL already installed</td><td>—</td></tr>
+<tr><td>Durable payout waits (DBOS)</td><td>✅ same local PostgreSQL</td><td>—</td></tr>
+<tr><td>Real model (Groq)</td><td>✅ called directly</td><td>APIM in front of it</td></tr>
+<tr><td>Tracing</td><td>✅ printed locally</td><td>App Insights</td></tr>
+<tr><td>Sign-in</td><td>✅ a local test sign-in</td><td>Entra (real tenant)</td></tr>
+<tr><td>Secrets, managed identity, hosting</td><td>—</td><td>Key Vault, managed identity, Container Apps</td></tr>
+</table></div>
+
+<h2>What's in Phase 1 and what waits for Phase 2</h2>
+<p>Each item from the architecture deck, with the call and the reason. Rule used: <b>in Phase 1 only if the end-to-end run in Azure needs it, or it's already built and costs nothing to carry.</b></p>
+<div class="tbl"><table>
+<tr><th>Item</th><th>Phase 1 has</th><th>Verdict</th><th>Why</th></tr>
+<tr><td><b>Router: answer with rules before calling the model</b> (deck slides 123–126)</td><td>Layer 1 only: rules and exact patterns. Claim status, refusals and "I want a person" are answered by code with <b>no model call</b>; only the rest reaches the agent. This is the router the clothing agent already has.</td><td><span class="pill done">Phase 1 (rules)</span><br><span class="pill later">Phase 2 (classifier, small LLM)</span></td><td>"Call the agent only when required" already holds with rules alone, and a scenario checks claim status makes no model call. The trained local classifier (Model2Vec) needs ~500 labelled messages we don't have yet.</td></tr>
+<tr><td><b>Several asks in one message</b> (slide 67)</td><td>Each ask is listed, nothing is silently dropped, and anything not answered is handed on by name (what the clothing agent does today; a scenario checks it).</td><td><span class="pill done">Phase 1 (basic)</span><br><span class="pill later">Phase 2 (full)</span></td><td>The basic rule is reuse and already proven. The full design (spans covering the message, read-only parts in parallel, a key per part, per-part failure reports) is new work.</td></tr>
+<tr><td><b>RAG lane</b>: answering policy-wording questions from retrieved clauses, with citations</td><td>None. A cover question is refused politely and left to the assessor (the AOAS refusal <code>R-COVERAGE</code>).</td><td><span class="pill later">Phase 2</span></td><td>An FNOL agent must not decide cover anyway; RAG needs policy documents, pgvector set-up and its own scenarios.</td></tr>
+<tr><td><b>Chatwoot</b> (web chat + staff desk)</td><td>Our own chat page for policyholders and the harness's own handler page for approvals.</td><td><span class="pill later">Phase 2</span></td><td>Chatwoot needs Redis, a background worker and ~1–2 GB of memory: likely beyond the free Container Apps grant, and not needed to prove the agent. Its adapter and webhook dedupe are new work.</td></tr>
+<tr><td><b>Cost</b> (slides 53, 128, the TCO calculator)</td><td>Per-turn budget enforced (steps, $ ceiling, tokens), cost on every trace, APIM token metrics, the <b>$5 Azure budget alert</b>.</td><td><span class="pill done">Phase 1 (guards)</span><br><span class="pill later">Phase 2 (calculation)</span></td><td>Guards are already in the harness. The calculation (cost per conversation and per outcome from real traces, hybrid vs all-agent, the scale-up estimate) needs real traffic first, which Phase 1 produces.</td></tr>
+<tr><td>Service Bus turn queue, Web PubSub, outbox</td><td>One request runs one turn.</td><td><span class="pill later">Phase 2</span></td><td>Needed for scale and closed-tab resilience, not for one user in dev.</td></tr>
+<tr><td>Teams adaptive cards for handlers</td><td>Handler page in the browser.</td><td><span class="pill later">Phase 2</span></td><td>Needs a Bot Service registration; the decision itself is the same.</td></tr>
+<tr><td>Content Safety, Prompt Shields</td><td>The harness's own screens (fence, PII, authority).</td><td><span class="pill later">Phase 2</span></td><td>An extra detector, not the guard; the free F0 tier can be added in an afternoon.</td></tr>
+<tr><td>Foundry models, Entra External ID, Front Door</td><td>Groq behind APIM; test users in your own tenant; Container Apps HTTPS.</td><td><span class="pill later">Phase 2 / production</span></td><td>All are production choices with costs; each is a configuration change, not code.</td></tr>
+</table></div>
+
+<!-- ===================================================== PHASE 1 -->
+<h2>Phase 1: end to end in Azure</h2>
+
+<div class="card" id="t0">
+  <div class="tierhead"><h3>Tier 0 · The groundwork</h3><span class="pill done">Done · 8 Oct</span></div>
+  <ul class="tasks">
+    <li>✅ The agent's spec (AOAS): entities, operations, refusals, policies, escalation; the ₹25,000 automatic payout limit</li>
+    <li>✅ A simulated world and 29 scenarios (report a claim, injury goes to a person, payout over the limit waits, a declined payout, a timeout retried, several asks, a stranger learns nothing, a planted instruction, a resumed conversation…)</li>
+    <li>✅ The Azure stack profile (which Azure service does which job)</li>
+    <li>✅ The shared harness library, <code>agent_harness</code>: <b>74.2%</b> of the clothing agent's code, reused as is</li>
+    <li>✅ Azure adapters in it: Pydantic AI model client, Azure Monitor tracing, Entra sign-in and token exchange, DBOS durable waits. Tested offline only so far.</li>
+  </ul>
+</div>
+
+<div class="card" id="t1">
+  <div class="tierhead"><h3>Tier 1 · The FNOL agent passes the gates on your Mac</h3><span class="pill next">Next · ≈2–3 days</span></div>
+  <p class="muted">No real model, no cost: a scripted model plays the agent's side.</p>
+  <ul class="tasks">
+    <li>The agent's own parts: intents learned from the spec's example messages; refusal texts; the "never promise cover" wording; claim-status answers with no model call</li>
+    <li>The payout rule: ₹25,000 read from the spec, held by a table test</li>
+    <li>The claims system: a small MCP server on PostgreSQL implementing the spec's operations; refusals come back with a reason type (<i>declined</i> or <i>temporary</i>); each policyholder sees only their own claims</li>
+    <li>The local composition: harness + these parts + the simulated world</li>
+    <li>Every gate failure routed to the spec it came from, not patched in the agent alone</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> all four gates (behaviour, features, structure, harness) pass against the 29 motor-claims scenarios.</div>
+</div>
+
+<div class="card" id="t2">
+  <div class="tierhead"><h3>Tier 2 · You can chat with it on your Mac</h3><span class="pill next">Planned · ≈1 day</span></div>
+  <ul class="tasks">
+    <li>Real model: Groq through the Pydantic AI client</li>
+    <li>Real waits: DBOS on local PostgreSQL</li>
+    <li>Chat page for the policyholder, handler page for approvals</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> in the browser you report a collision and get a claim reference; a payout above ₹25,000 waits, and you approve it from the handler page.</div>
+  <p class="muted"><b>Needs from you:</b> your Groq API key.</p>
+</div>
+
+<div class="card" id="t3">
+  <div class="tierhead"><h3>Tier 3 · The Azure resources exist</h3><span class="pill next">Planned · ≈2 days</span></div>
+  <ul class="tasks">
+    <li>First, each service's free allowance checked on its pricing page, and you confirm</li>
+    <li>A <b>$5 budget alert</b> before anything else</li>
+    <li>Bicep + <code>azd</code> (Azure's deploy tool) describe: Container Apps environment, PostgreSQL B1MS (free 12 months) with pgvector, APIM Consumption with Groq behind it, Key Vault, a managed identity per app, Log Analytics + App Insights, App Configuration (free), an Entra app registration</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> <code>azd up</code> creates everything from nothing, and <code>azd down</code> removes all of it.</div>
+  <p class="muted"><b>Needs from you:</b> an Azure subscription where you are Owner, with permission to create app registrations (a personal free account has both).</p>
+</div>
+
+<div class="card" id="t4">
+  <div class="tierhead"><h3>Tier 4 · It runs in Azure</h3><span class="pill next">Planned · ≈1–2 days</span></div>
+  <ul class="tasks">
+    <li>Images built and pushed to GitHub's container registry; deployed to Container Apps (agent, claims server)</li>
+    <li>GitHub Actions deploys with a federated login (OIDC): no secrets stored in GitHub; <b>the four gates run before every deploy</b></li>
+    <li>First live checks of what was offline only: Entra tokens (plus a policyholder-id claim), Azure PostgreSQL over TLS, APIM's token limit on the Consumption tier (fallback: request rate limits, noted)</li>
+    <li>Test policyholders: users in your own Entra tenant</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> you sign in at a public URL and report a claim; that conversation's trace is in App Insights; the model call is in APIM analytics; the month's spend is under $5.</div>
+  <p class="muted"><b>Needs from you:</b> approve adding the deploy login to the <code>claims-fnol-azure</code> repo.</p>
+</div>
+
+<div class="card" id="t5">
+  <div class="tierhead"><h3>Tier 5 · Your guided tour</h3><span class="pill next">Planned · ≈1 day</span></div>
+  <ul class="tasks">
+    <li>A new section in the Azure architecture page: each resource, what it is for, where to click, what to look at</li>
+    <li>Exercises: change the payout limit in App Configuration without a redeploy; roll a canary revision; watch a declined payout reach a person; follow one conversation end to end in App Insights</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> you have done each exercise yourself. <b>This is the end of Phase 1.</b></div>
+</div>
+
+<!-- ===================================================== PHASE 2 -->
+<h2 id="phase2">Phase 2: after it runs in Azure</h2>
+<p>In the order I'd do them. Each one is measured against what Phase 1's real traffic shows.</p>
+
+<div class="grid">
+<div class="card">
+  <div class="tierhead"><h3>Tier 6 · Router lanes</h3><span class="pill later">Phase 2</span></div>
+  <p>Send each message to the cheapest path that can answer it safely: <b>fixed flow</b> (code answers), <b>RAG</b> (answers from documents), or <b>agent</b> (several dependent steps).</p>
+  <ul class="tasks">
+    <li>~500 labelled motor-claims messages (a model proposes labels, a person approves)</li>
+    <li>Local classifier (Model2Vec + scikit-learn, ~1 ms, no network call) as router layer 2</li>
+    <li>A small LLM as layer 3, only when the classifier is unsure or there are several asks</li>
+    <li>Release gate: accuracy per route, and complex questions never sent to a fixed flow</li>
+  </ul>
+</div>
+<div class="card">
+  <div class="tierhead"><h3>Tier 7 · RAG over policy wording</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>Sample motor policy wordings embedded into pgvector (same PostgreSQL)</li>
+    <li>Answers only from retrieved clauses, cited; still no promise of cover</li>
+    <li>Entitlement filter first: only the policyholder's own policy wording</li>
+    <li>New scenarios: cited answer, clause not found, a planted instruction inside a document</li>
+  </ul>
+</div>
+<div class="card">
+  <div class="tierhead"><h3>Tier 8 · Several asks, the full design</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>The sorting step returns each ask with its part of the message; the parts must cover the whole message</li>
+    <li>Read-only parts in parallel; parts that change something run one at a time, each confirmed</li>
+    <li>A key per part (message id + part number), so a retry repeats nothing</li>
+    <li>One reply, reporting each part's own success or failure; more than three asks: ask which first</li>
+  </ul>
+</div>
+<div class="card">
+  <div class="tierhead"><h3>Tier 9 · Cost calculation</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>Cost per conversation and per outcome (claim registered, payout made) from real traces</li>
+    <li>Share of messages per lane: fixed flow / RAG / agent, measured, not assumed</li>
+    <li>Hybrid vs all-agent comparison with the measured shares (deck slide 128)</li>
+    <li>A workbook in Azure Monitor; budget thresholds from App Configuration</li>
+  </ul>
+</div>
+<div class="card">
+  <div class="tierhead"><h3>Tier 10 · Chatwoot and production shape</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>Chatwoot desk on Container Apps (our chat window in front; Chatwoot for the staff inbox and hand-offs), with webhook dedupe</li>
+    <li>Service Bus turn queue, outbox, Web PubSub: closed tabs and restarts never lose a turn</li>
+    <li>Teams cards for handlers; Content Safety at the edge</li>
+    <li>Foundry models behind APIM; Entra External ID for policyholders</li>
+    <li>Costed first: Chatwoot and Service Bus are where the free tier likely ends</li>
+  </ul>
+</div>
+</div>
+
+<h2>What I need from you, and when</h2>
+<div class="tbl"><table>
+<tr><th>When</th><th>What</th></tr>
+<tr><td>Tier 2</td><td>Your Groq API key</td></tr>
+<tr><td>Tier 3</td><td>An Azure subscription where you are Owner, able to create app registrations</td></tr>
+<tr><td>Tier 3</td><td>Confirm the free allowances before <code>azd up</code></td></tr>
+<tr><td>Tier 4</td><td>Approve the GitHub Actions deploy login on the repo</td></tr>
+<tr><td>Phase 2, Tier 6</td><td>Approve the labelled messages (or a person who knows motor claims does)</td></tr>
+</table></div>
+
+<h2>Words used here</h2>
+<div class="tbl"><table>
+<tr><td><b>Gates</b></td><td>The four automatic checks every build must pass: behaviour (the scenarios), features (every promise in the spec has a test), structure (every layer exists), harness (every required capability is proved or knowingly accepted as a gap).</td></tr>
+<tr><td><b>AOAS</b></td><td>The agent's spec file: what it may do, must refuse, and when it hands over to a person.</td></tr>
+<tr><td><b>Fixed flow / RAG / agent</b></td><td>Code answers / answers from retrieved documents / a model works through several dependent steps.</td></tr>
+<tr><td><b>APIM</b></td><td>Azure API Management: the one door every model call goes through, with limits and token counts.</td></tr>
+<tr><td><b>DBOS</b></td><td>A library that makes a wait (e.g. for a handler's approval) survive restarts, storing its state in PostgreSQL.</td></tr>
+<tr><td><b>Container Apps</b></td><td>Where our containers run; scales to zero, so idle costs nothing.</td></tr>
+</table></div>
+
+<h2>Change log</h2>
+<div class="tbl"><table>
+<tr><th>Date</th><th>Change</th></tr>
+<tr><td>8 Oct 2026</td><td>Plan created. Tier 0 done (specs, world and scenarios, stack profile, <code>agent_harness</code> library at 74.2% reuse, Azure adapters). Router lanes, RAG, full multi-ask handling, cost calculation and Chatwoot placed in Phase 2.</td></tr>
+</table></div>
+
+</main>
+</body>
+</html>
