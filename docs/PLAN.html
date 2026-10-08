@@ -68,12 +68,12 @@ ul.tasks li{margin:3px 0}
 
 <div class="strip">
   <a href="#t0"><span class="pill done">Done</span><b>Tier 0</b>Specs + library</a>
-  <a href="#t1"><span class="pill doing">In progress</span><b>Tier 1</b>Passes the gates on the Mac</a>
-  <a href="#t2"><span class="pill next">Planned</span><b>Tier 2</b>Chat with it on the Mac</a>
+  <a href="#t1"><span class="pill done">Done</span><b>Tier 1</b>Passes the gates on the Mac</a>
+  <a href="#t2"><span class="pill next">Next</span><b>Tier 2</b>Chat with it on the Mac</a>
   <a href="#t3"><span class="pill next">Planned</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
-  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–10</b>Router lanes, RAG, Chatwoot, cost, scale</a>
+  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–11</b>Router lanes, RAG, Chatwoot, cost, scale</a>
 </div>
 
 <h2>Can it be tested on the Mac?</h2>
@@ -119,7 +119,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t1">
-  <div class="tierhead"><h3>Tier 1 · The FNOL agent passes the gates on your Mac</h3><span class="pill doing">In progress · started 8 Oct</span></div>
+  <div class="tierhead"><h3>Tier 1 · The FNOL agent passes the gates on your Mac</h3><span class="pill done">Done · 9 Oct</span></div>
   <p class="muted">No real model, no cost: a scripted model plays the agent's side.</p>
   <ul class="tasks">
     <li>The agent's own parts: intents learned from the spec's example messages; refusal texts; the "never promise cover" wording; claim-status answers with no model call</li>
@@ -129,6 +129,7 @@ ul.tasks li{margin:3px 0}
     <li>Every gate failure routed to the spec it came from, not patched in the agent alone</li>
   </ul>
   <div class="dw"><b>Done when:</b> all four gates (behaviour, features, structure, harness) pass against the 29 motor-claims scenarios.</div>
+  <p><b>Result:</b> ✅ behaviour 29/29 · features 64/64 statements (286 tests) · structure 16/16 layers · harness 54 proved, 23 accepted gaps with reasons, 4 not applicable. The shared library is <b>~84%</b> of what this agent runs, and none of it had to be edited. 16 findings, listed in <code>FINDINGS.md</code>. The most important: ~1,110 lines of shared mechanism had to be copied, not imported (moving them into the library would take reuse to ~90%). Another made a scenario pass for the wrong reason; that is now caught.</p>
 </div>
 
 <div class="card" id="t2">
@@ -137,6 +138,8 @@ ul.tasks li{margin:3px 0}
     <li>Real model: Groq through the Pydantic AI client</li>
     <li>Real waits: DBOS on local PostgreSQL</li>
     <li>Chat page for the policyholder, handler page for approvals</li>
+    <li>The claims system as our own MCP server on local PostgreSQL (Tier 1 used the simulated world as the far end)</li>
+    <li>Fix the clothing wording a policyholder could see ("our order system" when the claims system is down; finding F-14)</li>
   </ul>
   <div class="dw"><b>Done when:</b> in the browser you report a collision and get a claim reference; a payout above ₹25,000 waits, and you approve it from the handler page.</div>
   <p class="muted"><b>Needs from you:</b> your Groq API key.</p>
@@ -228,6 +231,17 @@ ul.tasks li{margin:3px 0}
 </div>
 </div>
 
+<div class="card">
+  <div class="tierhead"><h3>Tier 11 · Library clean-up from the second agent</h3><span class="pill later">Phase 2</span></div>
+  <p>What building FNOL showed the shared library still lacks (<code>FINDINGS.md</code>):</p>
+  <ul class="tasks">
+    <li>Move the copied mechanism into <code>agent_harness</code>: the approval-backed action tool, turn orchestration, scenario wiring (F-2, F-3, F-15). Reuse would go from ~84% to ~90%.</li>
+    <li>Remove the clothing words still in the library: scopes, defaults, <code>order_id</code> (F-14)</li>
+    <li>Make it possible to extend: redaction patterns, the session field name, created references kept in the trace, judging per clause (F-4, F-5, F-8, F-10)</li>
+    <li>Spec gaps: refusal vs handoff order, registration plate as "a named policy" (F-6, F-7)</li>
+  </ul>
+</div>
+
 <h2>What I need from you, and when</h2>
 <div class="tbl"><table>
 <tr><th>When</th><th>What</th></tr>
@@ -251,6 +265,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>9 Oct 2026</td><td>Tier 1 done: all four gates pass (29/29 scenarios). Library reuse ~84%, unedited. 16 findings in FINDINGS.md; Tier 11 (library clean-up) added to Phase 2; the claims MCP server and the F-14 wording fix added to Tier 2.</td></tr>
 <tr><td>8 Oct 2026</td><td>Tier 1 started.</td></tr>
 <tr><td>8 Oct 2026</td><td>Plan created. Tier 0 done (specs, world and scenarios, stack profile, <code>agent_harness</code> library at 74.2% reuse, Azure adapters). Router lanes, RAG, full multi-ask handling, cost calculation and Chatwoot placed in Phase 2.</td></tr>
 </table></div>
