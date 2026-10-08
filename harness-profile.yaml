@@ -18,8 +18,151 @@ subject:
 catalog:
   ahc: "0.3.0"
 
-decisions: {}
-thresholds: {}
+# ---------------------------------------------------------------- decisions
+# Every decision the catalog keys on a capability this shape owes. The engine is
+# the clothing agent's library, so most answers are its answers, re-read against
+# this build: where Tier 1 differs (no edge, no deployment), the note says so.
+decisions:
+  AHC-0001/parse_failure:
+    value: fail-typed
+    source: chosen
+    note: ModelMalformed is its own type and never retried (tests/test_model_boundary.py).
+  AHC-0001/boundary_position:
+    value: harness
+    source: golden-path
+    note: One parse site, in agent_harness.llm; this agent imports no provider SDK (import contract and a source scan).
+  AHC-0001/raw_retention:
+    value: operator-only
+    source: chosen
+    note: The raw text rides on the typed failure's detail, never the policyholder's reply.
+  AHC-0004/choke_point:
+    value: both
+    source: golden-path
+    note: >-
+      In process: retries, backoff and the breaker (ResilientLLM), the allowlist and cost
+      per turn. At the edge: APIM in front of Groq on the Azure stack (Tier 3); Tier 1
+      reaches only the provider twin.
+  AHC-0004/sdk_containment:
+    value: import-contract
+    source: chosen
+    note: lint-imports forbids every provider SDK and pydantic_ai in claims_fnol.
+  AHC-0004/interface_shape:
+    value: own-interface
+    source: chosen
+    note: LLMClient is the harness's shape; a script, the provider twin's adapter and Pydantic AI stand in one slot.
+  AHC-0009/allow_list_scope:
+    value: global
+    source: golden-path
+    note: One list (Settings.approved_models), checked at resolve(), so a typo fails the process.
+  AHC-0009/withdrawn_model:
+    value: fail-at-build
+    source: chosen
+    note: An unpriced or unapproved model fails where the run is configured.
+  AHC-0014/unsettable_parameter:
+    value: not-arising
+    source: chosen
+    note: Temperature 0.0 is sent explicitly and the pinned gpt-oss-120b accepts it; revisit with any change of pin.
+  AHC-0019/redaction_point:
+    value: before-export
+    source: chosen
+    note: The harness's one redaction function on the capture path, extended with the AOAS's licence and account patterns.
+  AHC-0019/reversibility:
+    value: irreversible
+    source: chosen
+    note: Replaced, not tokenised.
+  AHC-0019/eval_path:
+    value: same-path
+    source: chosen
+    note: Evaluation exports through the same tracer, so it redacts by construction.
+  AHC-0025/output_limit:
+    value: outcome
+    source: golden-path
+    note: output_length_reached is its own termination; the clipped text is never passed on, and loop-exhausted escalates it.
+  AHC-0053/claim_scope:
+    value: verified-caller
+    source: golden-path
+    note: A delivery is claimed as policyholder:key, so another policyholder's same key runs their own turn (tests/test_state.py).
+  AHC-0053/occasion_source:
+    value: caller-supplied
+    source: golden-path
+    note: The delivery id the door passes to handle(); Tier 1 has no door, so only the in-process path is exercised.
+  AHC-0057/irreversible_scope:
+    value: authority-by-whose
+    source: chosen
+    note: >-
+      The line is the AOAS's authority, not reversibility: withdrawing one's own claim is
+      the policyholder's (withdraw_claim authority agent); money leaving the insurer above
+      the 25,000 automatic limit is a claims handler's (issue_payout agent_when).
+  AHC-0057/approval_staleness:
+    value: status-and-approved-amount
+    source: chosen
+    note: The claim's status and approved_amount are recorded at assessment and read again before a grant is spent.
+  AHC-0057/stale_grant:
+    value: ask-again
+    source: golden-path
+    note: A moved claim is not paid; a fresh approval is asked and named in superseded_by (P-APPROVAL-STALE).
+  AHC-0057/grant_carriage:
+    value: approval-on-the-call
+    source: chosen
+    note: >-
+      The elevated call carries the grant (Identity.grant). In Tier 1 the projected world
+      does not check it — see the AHC-0040 gap; the claims MCP server (Tier 2) will.
+  AHC-0057/approval_source:
+    value: harness-approval-records
+    source: chosen
+    note: The approval workflow's records; the agent can ask and read, a handler's desk decides.
+  AHC-0074/key_source:
+    value: run-step-iteration
+    source: golden-path
+    note: run:step:iteration on every write, carried to the far end; a granted payout runs under the key its request was made with.
+  AHC-0094/output_rule_reading:
+    value: folded-text
+    source: chosen
+    note: Every rule reads the harness's folded text; only the rules' copy is folded.
+  AHC-0105/replay_equivalence:
+    value: messages-tools-sampling
+    source: golden-path
+    note: The harness's cassette rule, recorded for when recordings exist (not applicable in Tier 1, see below).
+  AHC-0107/freshness_scope:
+    value: rows-an-irreversible-action-depends-on
+    source: chosen
+    note: claim.status fresh_for 30s (AOAS); a reply is held to the latest read by AHC-0117.
+  AHC-0107/read_stamp:
+    value: when-asked
+    source: golden-path
+    note: Stamped before the call is dispatched.
+  AHC-0108/facts_source:
+    value: written-as-work-happens
+    source: golden-path
+    note: What was asked, each concern, the rows read and the effects landed, written when each happens.
+  AHC-0109/summary_provenance:
+    value: no-summariser
+    source: chosen
+    note: Context is reduced only by dropping whole exchanges.
+  AHC-0110/failure_axis:
+    value: what-a-caller-can-do
+    source: golden-path
+    note: The harness's five kinds; only unreachable is retried.
+  AHC-0115/erasure_key:
+    value: customer-id
+    source: chosen
+    note: The policyholder id (Identity.customer_id), never the login.
+
+thresholds:
+  max_steps_per_task: 12              # Q-STEPS
+  max_output_tokens: 4096             # Q-OUTPUT
+  max_cost_usd_per_task: 0.50         # Q-COST
+  max_tool_result_characters: 8000    # Q-TOOL-RESULT
+  max_turn_seconds: 60
+  max_tool_calls_per_step: 8
+  max_tool_calls_per_turn: 24
+  approval_validity_hours: 24         # P-APPROVAL-TTL
+  escalation_queued_ttl_minutes: 30   # P-ESC-TTL
+  escalations_per_conversation: 2     # P-ESC-CAP
+  claim_status_fresh_for_seconds: 30  # AOAS claim.status fresh_for
+  retention_days: 30                  # Q-RETENTION
+  # The automatic payout limit is NOT restated: the AOAS governs it
+  # (issue_payout.authority), and tests/test_payout_limit.py reads it there.
 
 bindings:
   model:   # the gateway is the stack's; the pin is this agent's
@@ -29,5 +172,138 @@ bindings:
       usd_per_mtok_in: 0.0
       usd_per_mtok_out: 0.0
       price_read: "2026-10-08 — Groq free tier; Foundry pricing applies when the backend moves"
+  tool_runtime:
+    x_scopes:
+      register_claim: claims:write
+      submit_document: claims:write
+      withdraw_claim: claims:write
+      issue_payout: payouts:write
+    x_far_end: >-
+      Tier 1: the AgentTwin world, projected (the yardstick's world is the claims
+      system). Tier 2: a small MCP claims server on the local PostgreSQL.
 
-accepted_gaps: []
+accepted_gaps:
+  - capability: AHC-0006
+    reason: >-
+      Spans are one trace per turn in process; no trace context crosses an MCP call or
+      the model gateway. Azure Monitor and APIM arrive in Tiers 3-4.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0026
+    reason: >-
+      The run id is on every in-process span and inside each write's idempotency key; a
+      read carries none and nothing crosses to the gateway. Same work as AHC-0006.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0016
+    reason: >-
+      Tier 1 has no door: handle() is driven directly, and the harness's serve edge,
+      which validates input before any model call, is not mounted until the Tier 2
+      chat page.
+    owner: claims-fnol-azure
+    review: "2026-11-15"
+  - capability: AHC-0099
+    reason: >-
+      No credential is verified in Tier 1: scenarios assert the policyholder id. The
+      Entra verifier is in agent_harness.identity.entra and is wired with the edge
+      (Tier 2 local sign-in, Tier 4 Entra).
+    owner: claims-fnol-azure
+    review: "2026-11-15"
+  - capability: AHC-0040
+    reason: >-
+      The projected world trusts the session and does not check scope or the grant
+      where the payout executes; the agent hides issue_payout and only a grant puts it
+      on a surface. The claims MCP server on PostgreSQL (Tier 2) is where the check lands.
+    owner: claims-fnol-azure
+    review: "2026-11-15"
+  - capability: AHC-0058
+    reason: >-
+      The AOAS declares each operation's compensation; nothing in the build reads it.
+      The harness's own compensation table (agent_harness.resilience.COMPENSATIONS) is
+      the clothing agent's and unwired (FINDINGS F-12).
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0020
+    reason: Nothing caps how many conversations wait on the model at once; one user in Tier 1-2.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0023
+    reason: No recorded provider fixtures exist for this agent yet; the first real calls are Tier 2.
+    owner: claims-fnol-azure
+    review: "2026-11-15"
+  - capability: AHC-0028
+    reason: >-
+      No grader is wired: the online watch's rules are the clothing agent's, and the
+      scenarios' checks carry no version of their own.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0029
+    reason: A production turn cannot yet become a dataset row; there is no production.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0031
+    reason: Context size is one number per call, not broken down by segment class or compared across releases.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0032
+    reason: No deployment, so no rollback; Container Apps revisions arrive in Tier 4.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0033
+    reason: No deployment, so no artifact serving traffic to compare with the one assessed.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0071
+    reason: One loop, no graph; nothing has edges to type.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0072
+    reason: No graph, so no topology to inspect as data.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0073
+    reason: No graph; the trajectory is checkpointed per turn (AHC-0044) and an approval resumes from it.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0075
+    reason: The budget is a per-turn ceiling checked as spend accumulates, not an allocation.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0090
+    reason: No segment labels are attached at the boundary; the AOAS names none.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0095
+    reason: Policy evaluation has no budget and no timeout path; a hung rule takes the turn with it.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0098
+    reason: Nothing is admitted by class; one user in Tier 1-2.
+    owner: claims-fnol-azure
+    review: "2026-12-01"
+  - capability: AHC-0111
+    reason: The harness's counters are recorded, and no metrics pipeline is wired in Tier 1; Azure Monitor arrives in Tier 3.
+    owner: claims-fnol-azure
+    review: "2026-11-30"
+  - capability: AHC-0112
+    reason: No feedback path exists without the chat page (Tier 2).
+    owner: claims-fnol-azure
+    review: "2026-11-30"
+  - capability: AHC-0113
+    reason: No serving path to drive a synthetic run through until Tier 4.
+    owner: claims-fnol-azure
+    review: "2026-12-15"
+
+not_applicable:
+  - capability: AHC-0015
+    reason: Nothing is streamed; handle() returns the whole answer.
+    revisit_when: the reply is streamed to the caller
+  - capability: AHC-0092
+    reason: The AOAS declares residency undeclared, and there is one provider endpoint.
+    revisit_when: a jurisdiction constrains where conversations may be processed
+  - capability: AHC-0105
+    reason: No provider interaction is recorded for replay in this build; scripted answers are not recordings.
+    revisit_when: recordings are captured (Tier 2, the first real model calls)
+  - capability: AHC-0109
+    reason: Nothing summarises; context is reduced by dropping whole exchanges.
+    revisit_when: a summariser is added to context reduction
