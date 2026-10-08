@@ -1,0 +1,33 @@
+# The motor-claims FNOL agent's harness profile (T-099).
+#
+# Extends the Azure stack; what is here is this agent's alone. The automatic
+# payout limit is NOT restated: the AOAS governs it (issue_payout.authority),
+# and a copy here is how the clothing agent ended up with three (F-088).
+apiVersion: harness-profile/v1
+
+extends: ../clean-ai-engineering/stacks/azure.yaml
+
+subject:
+  name: motor-claims-fnol
+  description: >-
+    A motor insurer's claims agent: a signed-in policyholder reports an
+    incident, follows their claim, sends what the assessor needs, and is paid
+    when a claim is approved. A deterministic router ahead of our loop.
+  archetypes: [A6, A5]
+
+catalog:
+  ahc: "0.3.0"
+
+decisions: {}
+thresholds: {}
+
+bindings:
+  model:   # the gateway is the stack's; the pin is this agent's
+    x_model:
+      id: openai/gpt-oss-120b
+      provider: groq
+      usd_per_mtok_in: 0.0
+      usd_per_mtok_out: 0.0
+      price_read: "2026-10-08 — Groq free tier; Foundry pricing applies when the backend moves"
+
+accepted_gaps: []
