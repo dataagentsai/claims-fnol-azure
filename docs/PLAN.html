@@ -70,10 +70,11 @@ ul.tasks li{margin:3px 0}
   <a href="#t0"><span class="pill done">Done</span><b>Tier 0</b>Specs + library</a>
   <a href="#t1"><span class="pill done">Done</span><b>Tier 1</b>Passes the gates on the Mac</a>
   <a href="#t2"><span class="pill done">Done</span><b>Tier 2</b>Chat with it on the Mac</a>
-  <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
+  <a href="#t2b"><span class="pill next">Next</span><b>Tier 2b</b>Checks as plug-ins</a>
+  <a href="#t3"><span class="pill next">Planned</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
-  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–11</b>Router lanes, RAG, Chatwoot, cost, scale</a>
+  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–12</b>Router lanes, RAG, Chatwoot, cost, scale</a>
 </div>
 
 <h2>Can it be tested on the Mac?</h2>
@@ -100,7 +101,11 @@ ul.tasks li{margin:3px 0}
 <tr><td><b>Cost</b> (slides 53, 128, the TCO calculator)</td><td>Per-turn budget enforced (steps, $ ceiling, tokens), cost on every trace, APIM token metrics, the <b>$5 Azure budget alert</b>.</td><td><span class="pill done">Phase 1 (guards)</span><br><span class="pill later">Phase 2 (calculation)</span></td><td>Guards are already in the harness. The calculation (cost per conversation and per outcome from real traces, hybrid vs all-agent, the scale-up estimate) needs real traffic first, which Phase 1 produces.</td></tr>
 <tr><td>Service Bus turn queue, Web PubSub, outbox</td><td>One request runs one turn.</td><td><span class="pill later">Phase 2</span></td><td>Needed for scale and closed-tab resilience, not for one user in dev.</td></tr>
 <tr><td>Teams adaptive cards for handlers</td><td>Handler page in the browser.</td><td><span class="pill later">Phase 2</span></td><td>Needs a Bot Service registration; the decision itself is the same.</td></tr>
-<tr><td>Content Safety, Prompt Shields</td><td>The harness's own screens (fence, PII, authority).</td><td><span class="pill later">Phase 2</span></td><td>An extra detector, not the guard; the free F0 tier can be added in an afternoon.</td></tr>
+<tr><td><b>Checks as plug-ins</b> (deck slides 93–94): one <code>EvalRequest</code> in, one <code>EvalResult</code> out, every check placed by <code>evaluators.yaml</code></td><td>The port, the registry and the YAML, with our own rules as the first plug-ins at three positions: <i>reply</i> (inline, blocks), <i>online</i> (after the turn), <i>release</i> (CI gate). Startup refuses a slow check at an inline position or an unknown name.</td><td><span class="pill next">Phase 1 (Tier 2b)</span></td><td>It is the shape every later check plugs into; building it after Azure would mean wiring the checks twice. It is local library work: no Azure, no cost.</td></tr>
+<tr><td><b>Azure-provided inline checks</b> (slides 85, steps 36–42)</td><td>APIM's model allow-list and token limit; <b>Content Safety F0</b> (free tier) screening the input and output through APIM, its results logged as a plug-in (<code>guardrail_log</code>).</td><td><span class="pill next">Phase 1 (Tiers 3–4)</span></td><td>With Groq behind APIM there are <b>no Foundry guardrails</b> (Prompt Shields and content filters come with Foundry models). Content Safety F0 is the free way to have at least one Azure-provided check run end to end.</td></tr>
+<tr><td><b>Azure evaluators</b> (slides 86, 91–92): Output Quality and Tool Use bundles, Groundedness, safety evaluators, AI Red Teaming Agent</td><td>None.</td><td><span class="pill later">Phase 2 (Tier 12)</span></td><td>They need a Foundry project and a judge model. Whether a free Groq model can be the judge needs checking first (owner's rule: no paid model APIs).</td></tr>
+<tr><td><b>Online evaluation on Azure</b> (slides 98–99): the watch job reading App Insights, findings in PostgreSQL, alert rules</td><td>The inline rules run on every turn; traces land in App Insights.</td><td><span class="pill later">Phase 2 (Tier 12)</span></td><td>The watch job today reads Langfuse; the App Insights (KQL) reader and the findings table are new work, and alerts need Managed Prometheus.</td></tr>
+<tr><td>Content Safety via Foundry, Prompt Shields</td><td>The harness's own screens (fence, PII, authority) plus Content Safety F0 at APIM.</td><td><span class="pill later">Phase 2</span></td><td>They come with Foundry models; dev uses Groq.</td></tr>
 <tr><td>Foundry models, Entra External ID, Front Door</td><td>Groq behind APIM; test users in your own tenant; Container Apps HTTPS.</td><td><span class="pill later">Phase 2 / production</span></td><td>All are production choices with costs; each is a configuration change, not code.</td></tr>
 </table></div>
 
@@ -145,12 +150,25 @@ ul.tasks li{margin:3px 0}
   <p><b>Result:</b> ✅ the four flows pass with the real model (gpt-oss-120b on Groq), run over the same HTTP calls the two pages make: a collision reported gets <b>CLM-019002</b> from our claims system; ₹25,001 waits on the handler desk until approved, then is paid; ₹25,000 is paid at once; claim status needs no model call. 7 model calls, 5,905 input and 493 output tokens. The first run failed two of them in words, never in tools: our output rules misread the model's replies (a non-breaking hyphen in every reference, a rule judging the wrong row, a payout answer that did not name its claim). All fixed, two in the shared library. Gates still pass; findings F-17 to F-26 in <code>FINDINGS.md</code>. Run it yourself: README, "Run it on your Mac" (<code>scripts/dev-up.sh</code>, then <code>/signin</code>).</p>
 </div>
 
+<div class="card" id="t2b">
+  <div class="tierhead"><h3>Tier 2b · Checks as plug-ins, on your Mac</h3><span class="pill next">Next · ≈1–2 days</span></div>
+  <p class="muted">The deck's judge kit (slides 93–94, asset 15), first slice. Added 9 Oct after the deck's evaluation part was updated.</p>
+  <ul class="tasks">
+    <li>In <code>agent_harness</code>: <code>EvalRequest</code> (query/messages, response with tool calls, allowed tools, context with source ids, expected for golden cases, meta) and <code>EvalResult</code> (verdict pass/fail/skip/error, score 0–1 and raw score, threshold, reason, evaluator/version/provider, cost, latency)</li>
+    <li>A registry that reads <code>evaluators.yaml</code>: evaluator kinds (<code>rule</code>, <code>presidio</code>, <code>guardrail_log</code>, later <code>azure</code>, <code>open_model</code>) and positions (<code>reply</code>, <code>online</code>, <code>release</code>) with <code>on_fail</code>, <code>sample</code>, <code>max_ms</code>; each plug-in declares what it needs, so a missing input is <i>skip</i>, never a failure</li>
+    <li>Fails at startup on an unknown kind, name or field, or a check too slow for an inline position; a test runs every configured check on one golden case</li>
+    <li>Our existing reply rules wrapped as the first <code>rule</code> plug-ins, with no change to what the clothing or FNOL agent does; the FNOL agent gets its own <code>evaluators.yaml</code></li>
+    <li>The "£25,000" slip (F-25): a money-symbol rule, added by YAML once written, plus a scenario</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> both agents still pass all four gates with their checks placed by YAML; moving a check or changing a threshold is a YAML-only change, shown by a test.</div>
+</div>
+
 <div class="card" id="t3">
   <div class="tierhead"><h3>Tier 3 · The Azure resources exist</h3><span class="pill next">Planned · ≈2 days</span></div>
   <ul class="tasks">
     <li>First, each service's free allowance checked on its pricing page, and you confirm</li>
-    <li>A <b>$5 budget alert</b> before anything else</li>
-    <li>Bicep + <code>azd</code> (Azure's deploy tool) describe: Container Apps environment, PostgreSQL B1MS (free 12 months) with pgvector, APIM Consumption with Groq behind it, Key Vault, a managed identity per app, Log Analytics + App Insights, App Configuration (free), an Entra app registration</li>
+    <li>A <b>$10 budget alert</b> before anything else (Pay-As-You-Go: the 12-month free offer is used up, so PostgreSQL is the one real cost)</li>
+    <li>Bicep + <code>azd</code> (Azure's deploy tool) describe: Container Apps environment, PostgreSQL B1MS with pgvector (stopped when idle), APIM Consumption with Groq behind it, Content Safety F0, Key Vault, a managed identity per app, Log Analytics + App Insights, App Configuration (free), an Entra app registration</li>
   </ul>
   <div class="dw"><b>Done when:</b> <code>azd up</code> creates everything from nothing, and <code>azd down</code> removes all of it.</div>
   <p class="muted"><b>Needs from you:</b> an Azure subscription where you are Owner, with permission to create app registrations (a personal free account has both).</p>
@@ -163,8 +181,9 @@ ul.tasks li{margin:3px 0}
     <li>GitHub Actions deploys with a federated login (OIDC): no secrets stored in GitHub; <b>the four gates run before every deploy</b></li>
     <li>First live checks of what was offline only: Entra tokens (plus a policyholder-id claim), Azure PostgreSQL over TLS, APIM's token limit on the Consumption tier (fallback: request rate limits, noted)</li>
     <li>Test policyholders: users in your own Entra tenant</li>
+    <li>APIM policy: Content Safety screens the input and output of each model call; its verdicts are recorded as <code>EvalResult</code>s by the <code>guardrail_log</code> plug-in</li>
   </ul>
-  <div class="dw"><b>Done when:</b> you sign in at a public URL and report a claim; that conversation's trace is in App Insights; the model call is in APIM analytics; the month's spend is under $5.</div>
+  <div class="dw"><b>Done when:</b> you sign in at a public URL and report a claim; that conversation's trace is in App Insights with each check's result on it (ours and Content Safety's); the model call is in APIM analytics; spend stays inside the budget.</div>
   <p class="muted"><b>Needs from you:</b> approve adding the deploy login to the <code>claims-fnol-azure</code> repo.</p>
 </div>
 
@@ -172,7 +191,7 @@ ul.tasks li{margin:3px 0}
   <div class="tierhead"><h3>Tier 5 · Your guided tour</h3><span class="pill next">Planned · ≈1 day</span></div>
   <ul class="tasks">
     <li>A new section in the Azure architecture page: each resource, what it is for, where to click, what to look at</li>
-    <li>Exercises: change the payout limit in App Configuration without a redeploy; roll a canary revision; watch a declined payout reach a person; follow one conversation end to end in App Insights</li>
+    <li>Exercises: change the payout limit in App Configuration without a redeploy; roll a canary revision; watch a declined payout reach a person; follow one conversation end to end in App Insights; move a check from <i>online</i> to <i>reply</i> in <code>evaluators.yaml</code> and see the gates and the trace change</li>
   </ul>
   <div class="dw"><b>Done when:</b> you have done each exercise yourself. <b>This is the end of Phase 1.</b></div>
 </div>
@@ -242,6 +261,17 @@ ul.tasks li{margin:3px 0}
   </ul>
 </div>
 
+<div class="card">
+  <div class="tierhead"><h3>Tier 12 · Evaluation on Azure</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>The <code>azure</code> plug-in kind: the adapter that maps <code>EvalRequest</code> to an Azure evaluator's inputs and its score back to <code>EvalResult</code>; Output Quality and Tool Use bundles sampled online (~5%), the individual evaluators at release (slides 86, 91)</li>
+    <li>The judge model: first check whether a free Groq model can serve as Azure's judge; if only a paid Foundry model works, the owner decides</li>
+    <li>Online watch on Azure: a Container Apps Job reading App Insights (KQL), the same rule library, findings in PostgreSQL keyed by verdict id (slides 98–99)</li>
+    <li>Our free replacements where they are as good (slide 92): tool selection and input checks from golden cases, Presidio for leakage, logged guardrail results on 100% of turns</li>
+    <li>Alert rules and the four-question dashboard (Managed Prometheus and Grafana: a production cost, priced first)</li>
+  </ul>
+</div>
+
 <h2>What I need from you, and when</h2>
 <div class="tbl"><table>
 <tr><th>When</th><th>What</th></tr>
@@ -265,6 +295,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>9 Oct 2026</td><td>Checked against the deck's updated evaluation part (slides 48–50 journey, 85–118 checks and assurance). Added <b>Tier 2b</b> (checks as plug-ins: <code>EvalRequest</code>/<code>EvalResult</code>, <code>evaluators.yaml</code> with positions), <b>Content Safety F0 at APIM</b> to Tiers 3–4 (no Foundry guardrails while the model is Groq), and <b>Tier 12</b> (Azure evaluators, online watch on Azure). Budget alert raised to $10: the 12-month free offer is used up.</td></tr>
 <tr><td>9 Oct 2026</td><td>Tier 2 done: the claims system as our own MCP server on PostgreSQL, Groq through Pydantic AI, DBOS waits, the chat page and the handler desk with a local sign-in, run scripts. Live smoke check passes all four flows. Findings F-17 to F-26; two library fixes (F-14 wording, F-17 rule).</td></tr>
 <tr><td>9 Oct 2026</td><td>Tier 1 done: all four gates pass (29/29 scenarios). Library reuse ~84%, unedited. 16 findings in FINDINGS.md; Tier 11 (library clean-up) added to Phase 2; the claims MCP server and the F-14 wording fix added to Tier 2.</td></tr>
 <tr><td>8 Oct 2026</td><td>Tier 1 started.</td></tr>
