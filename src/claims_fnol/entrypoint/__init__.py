@@ -324,6 +324,7 @@ class Agent:
                     gone=gone,
                     resumed=conversation.facts.read,
                     owed=still_owed(router.owed(decision.goal), conversation.facts.read),
+                    unreachable=binding.UNREACHABLE,
                 )
                 result = reference.given(result, created.made)  # P-FNOL
                 return result, tuple(trace.effects), tuple(trace.tool_calls), tuple(trace.reads)

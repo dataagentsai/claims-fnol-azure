@@ -485,10 +485,15 @@ source = { editable = "." }
 dependencies = [
     { name = "agent-harness", extra = ["azure"] },
     { name = "jinja2" },
+    { name = "mcp" },
+    { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pyyaml" },
+    { name = "starlette" },
     { name = "temporalio" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -507,14 +512,19 @@ requires-dist = [
     { name = "agenttwin", marker = "extra == 'dev'", editable = "../agenttwin" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "mcp", specifier = ">=2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "starlette", specifier = ">=1.6" },
     { name = "temporalio", specifier = "==1.33.0" },
+    { name = "uvicorn", specifier = ">=0.52" },
 ]
 provides-extras = ["dev"]
 

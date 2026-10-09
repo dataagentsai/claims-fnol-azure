@@ -20,6 +20,11 @@ SYSTEM_PROMPT = (
 )
 """Prompt v1. This insurer's words; the composition root only passes them on."""
 
+UNREACHABLE = "I cannot reach our claims system right now."
+"""What a policyholder is told when the claims system cannot be reached, on the
+direct route and in the loop alike. The library's default is neutral; these are
+this insurer's words (FINDINGS F-14, fixed in agent_harness 205b04a)."""
+
 SCOPE_CLAIMS_READ = "claims:read"
 SCOPE_CLAIMS_WRITE = "claims:write"
 SCOPE_PAYOUTS_WRITE = "payouts:write"
@@ -53,4 +58,5 @@ __all__ = [
     "SCOPE_PAYOUTS_WRITE",
     "SESSION_FIELD",
     "SYSTEM_PROMPT",
+    "UNREACHABLE",
 ]

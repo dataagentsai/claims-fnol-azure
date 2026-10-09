@@ -3,3 +3,6 @@ __pycache__/
 .env
 reports/
 .azure/
+
+# Tier 2: the dev scripts keep pids and logs here. Local state, never source.
+.state/

@@ -15,6 +15,7 @@ the far end's `kind` — is mechanism the library does not yet hold (FINDINGS F-
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
@@ -185,7 +186,7 @@ class PayoutWork:
     @activity.defn(name=CARRY_OUT)
     async def carry_out(self, approval: Approval) -> CarriedOut:
         who = await self.acting_for(approval.customer_id)
-        now = int(activity.info().current_attempt_scheduled_time.timestamp())
+        now = _attempted_at()
         with tel.span("agent.approval.carry_out", **{"agent.approval.id": approval.id}):
             changed = await self._changed(approval, who)
             if changed is not None:
@@ -208,6 +209,17 @@ class PayoutWork:
                 raise ToolUnavailable(claim.text)
             return f"the claim could not be read again: {claim.text}"
         return moved(approval, judged(claim))
+
+
+def _attempted_at() -> int:
+    """When this attempt was scheduled, on Temporal; the wall's, on DBOS.
+
+    The same activity runs as a DBOS step (Tier 2), where there is no activity
+    context to ask: the step reads the wall once and its result is checkpointed,
+    which is `box.now`'s guarantee for this one call."""
+    if activity.in_activity():
+        return int(activity.info().current_attempt_scheduled_time.timestamp())
+    return int(time.time())
 
 
 def _keyed(ask: Ask) -> Approval:

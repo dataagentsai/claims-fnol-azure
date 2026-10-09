@@ -13,6 +13,7 @@ from typing import Protocol
 from agent_harness import context as ctx
 from agent_harness import telemetry as tel
 
+from claims_fnol import binding
 from claims_fnol.contracts import (
     Completed,
     Direct,
@@ -101,7 +102,7 @@ async def _row(
         result = await tools.call(tool, bind_arguments(spec, decision.args), identity, key)
     except ToolUnavailable as exc:
         return Failed(
-            customer_message="I cannot reach our claims system right now.", detail=str(exc)
+            customer_message=binding.UNREACHABLE, detail=str(exc)
         )
     except Exception as exc:  # noqa: BLE001 — the contract holds here too
         return Failed(
