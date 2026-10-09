@@ -87,3 +87,14 @@ added to find the rules. gpt-oss-120b chose the right tools every time
 never called `issue_payout` itself. What failed was ours: three readers of its
 replies (F-17, F-18, F-21).
 
+
+## Owner decisions on the Tier 3 findings (9 Oct 2026)
+
+The owner asked for these to be decided; the recommendations were taken as made.
+
+| Finding | Decision | Why |
+|---|---|---|
+| F-41 database sign-in | **Password in Key Vault for dev.** Entra sign-in to PostgreSQL becomes a Phase 2 adapter (a token-refreshing connection provider behind the state and approvals ports). | The adapters take one connection string; nothing refreshes an Entra token yet. |
+| F-39 / F-40 Content Safety unavailable or out of F0 quota | **Fail open**, marked `x-content-safety: unavailable` and counted. | Content Safety is an extra detector, not the guard (deck, gateway slide). Our own screens run on every turn. Failing closed would stop the agent once 5,000 free checks a month are spent. |
+| F-45 scale to zero | **Keep min replicas 0; seed only a never-seeded database** (`seed --if-empty` in the container). Approval expiries and reminders fire when a replica next wakes, which is fine in dev. | One replica always on exceeds the free grant. Re-seeding at every cold start reset the demo claims. Table test: `test_a_deployed_start_seeds_only_an_empty_database`. |
+| F-46 screening in South India | **Accepted for dev.** | Data stays in India. |

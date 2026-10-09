@@ -45,7 +45,10 @@ async def test_the_standing_instruction_is_first_and_apart_from_the_turn() -> No
 async def test_the_policyholders_credential_never_enters_context() -> None:
     secret = "eyJhbGciOiJSUzI1NiJ9.c2VjcmV0.c2lnbmF0dXJl"
     who = Identity(customer_id="PH-1001", scopes=me().scopes, token=secret)
-    answers = [says("", ("get_claim", {"id": "CLM-010006"})), says("CLM-010006 waits on documents.")]
+    answers = [
+        says("", ("get_claim", {"id": "CLM-010006"})),
+        says("CLM-010006 waits on documents."),
+    ]
     async with agent(answers) as (built, llm):
         await built.handle("where are CLM-010006 and CLM-010007?", identity=who)
     sent = " ".join(m.content for call in llm.calls for m in call.messages)
@@ -71,7 +74,9 @@ BUDGETS = [(3, 24_000, False), (40, 24_000, True), (40, 4_000, True)]
 
 
 @pytest.mark.discharges("AHC-0012", "AHC-0103", "AHC-0002")
-@pytest.mark.parametrize(("exchanges", "budget", "trims"), BUDGETS, ids=[f"{b[0]}x{b[1]}" for b in BUDGETS])
+@pytest.mark.parametrize(
+    ("exchanges", "budget", "trims"), BUDGETS, ids=[f"{b[0]}x{b[1]}" for b in BUDGETS]
+)
 def test_the_assembler_bounds_context_whole_exchanges_at_a_time(
     exchanges: int, budget: int, trims: bool
 ) -> None:

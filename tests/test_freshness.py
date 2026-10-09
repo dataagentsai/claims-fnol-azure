@@ -50,7 +50,9 @@ async def test_an_irreversible_withdrawal_on_a_stale_read_reads_again_first(
         async def moving(request):  # type: ignore[no-untyped-def]
             if len(llm.calls) == 1:
                 now[0] += gap  # time passes between the read and the plan to withdraw
-                world.rows["claim"]["CLM-010005"]["status"] = "under_assessment"  # the assessor starts
+                world.rows["claim"]["CLM-010005"]["status"] = (
+                    "under_assessment"  # the assessor starts
+                )
             return await original(request)
 
         llm.complete = moving  # type: ignore[method-assign]

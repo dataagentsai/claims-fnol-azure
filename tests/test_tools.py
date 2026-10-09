@@ -15,7 +15,11 @@ from claims_fnol.binding import SCOPES
 from claims_fnol.contracts import IdempotencyKey, RunId, SideEffectClass
 
 SPEC = yaml.safe_load(AOAS.read_text())
-CLASSES = {"read": SideEffectClass.READ, "reversible": SideEffectClass.REVERSIBLE, "irreversible": SideEffectClass.IRREVERSIBLE}
+CLASSES = {
+    "read": SideEffectClass.READ,
+    "reversible": SideEffectClass.REVERSIBLE,
+    "irreversible": SideEffectClass.IRREVERSIBLE,
+}
 
 
 def key(step: int = 0) -> IdempotencyKey:
@@ -26,7 +30,9 @@ def key(step: int = 0) -> IdempotencyKey:
 @pytest.mark.parametrize("operation", SPEC["external"]["claims_system"]["operations"])
 async def test_every_operation_declares_its_contract_and_class(operation: str) -> None:
     async with claims_system() as tools:
-        surface = await tools.list_tools(me().model_copy(update={"scopes": frozenset(SCOPES.values())}))
+        surface = await tools.list_tools(
+            me().model_copy(update={"scopes": frozenset(SCOPES.values())})
+        )
     spec = surface.get(operation)
     assert spec is not None and spec.input_schema.get("type") == "object"
     assert spec.side_effect is CLASSES[SPEC["operations"][operation]["side_effect"]]
@@ -58,7 +64,9 @@ async def test_the_irreversible_payout_needs_a_grant_the_policyholder_does_not_h
 async def test_arguments_are_checked_before_the_tool_runs() -> None:
     world = live()
     answers = [
-        says("", ("submit_document", {"claim": "CLM-010006"})),  # no id, an argument it does not take
+        says(
+            "", ("submit_document", {"claim": "CLM-010006"})
+        ),  # no id, an argument it does not take
         says("I could not attach that."),
     ]
     async with agent(answers, world=world) as (built, llm):
@@ -78,8 +86,12 @@ OWNERSHIP = [
 ]
 
 
-@pytest.mark.discharges("P-OWNERSHIP", "R-OTHER-HOLDER", "AHC-0034", "op:get_claim", "ext:claims_system")
-@pytest.mark.parametrize(("who", "claim", "found"), OWNERSHIP, ids=[f"{o[0]}-{o[1]}" for o in OWNERSHIP])
+@pytest.mark.discharges(
+    "P-OWNERSHIP", "R-OTHER-HOLDER", "AHC-0034", "op:get_claim", "ext:claims_system"
+)
+@pytest.mark.parametrize(
+    ("who", "claim", "found"), OWNERSHIP, ids=[f"{o[0]}-{o[1]}" for o in OWNERSHIP]
+)
 async def test_the_policyholders_identity_reaches_the_claims_system(
     who: str, claim: str, found: bool
 ) -> None:
@@ -88,7 +100,9 @@ async def test_the_policyholders_identity_reaches_the_claims_system(
     assert isinstance(result.structured, dict)
     assert (result.structured.get("found") is not False) is found
     if not found:
-        assert set(result.structured) == {"found", "allowed", "reason"}, "nothing about the row leaks"
+        assert set(result.structured) == {"found", "allowed", "reason"}, (
+            "nothing about the row leaks"
+        )
 
 
 @pytest.mark.discharges("P-OWNERSHIP", "op:list_claims", "op:list_policies")
@@ -111,7 +125,9 @@ async def test_a_repeated_write_under_one_key_lands_once() -> None:
     assert first.structured == again.structured
 
 
-@pytest.mark.discharges("AHC-0104", "op:withdraw_claim", "op:submit_document", "P-WITHDRAW", "P-DOCUMENTS")
+@pytest.mark.discharges(
+    "AHC-0104", "op:withdraw_claim", "op:submit_document", "P-WITHDRAW", "P-DOCUMENTS"
+)
 async def test_writes_planned_together_run_one_at_a_time_in_order() -> None:
     world = live()
     both = says(

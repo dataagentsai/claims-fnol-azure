@@ -74,7 +74,9 @@ PERSONAL = [
 
 @pytest.mark.discharges("AHC-0019")
 @pytest.mark.parametrize(("typed", "secret"), PERSONAL, ids=[p[1] for p in PERSONAL])
-async def test_personal_data_is_redacted_before_it_leaves_the_process(typed: str, secret: str) -> None:
+async def test_personal_data_is_redacted_before_it_leaves_the_process(
+    typed: str, secret: str
+) -> None:
     assert secret not in redact(typed)
     exporter = tel.configure(capture_payloads=True, capture_sample=1.0)
     async with agent([says("Thank you.")]) as (built, _):

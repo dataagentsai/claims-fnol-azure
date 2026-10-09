@@ -31,7 +31,9 @@ def seconds(ttl: str) -> int:
 
 
 @pytest.mark.discharges(*[f"esc:{r['id']}" for r in ESCALATION["on_condition"]])
-@pytest.mark.parametrize("rule", ESCALATION["on_condition"], ids=[r["id"] for r in ESCALATION["on_condition"]])
+@pytest.mark.parametrize(
+    "rule", ESCALATION["on_condition"], ids=[r["id"] for r in ESCALATION["on_condition"]]
+)
 def test_every_tier_2_rule_is_the_aoas_rule(rule: dict[str, object]) -> None:
     ours = OURS[str(rule["id"])]
     assert ours.priority == rule["priority"]
@@ -63,7 +65,9 @@ def test_the_intents_are_the_aoas_intents_and_each_is_dealt_with_by_its_via() ->
 @pytest.mark.discharges("P-CLAIM-STATUS")
 def test_the_states_are_the_aoas_states() -> None:
     assert {s.value for s in ClaimStatus} == set(SPEC["state_machines"]["claim_status"]["states"])
-    assert {s.value for s in PolicyStatus} == set(SPEC["entities"]["policy"]["fields"]["status"]["values"])
+    assert {s.value for s in PolicyStatus} == set(
+        SPEC["entities"]["policy"]["fields"]["status"]["values"]
+    )
 
 
 @pytest.mark.discharges("AHC-0039", "AHC-0057")

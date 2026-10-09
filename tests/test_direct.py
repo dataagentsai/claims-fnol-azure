@@ -19,22 +19,33 @@ from claims_fnol.entrypoint.direct import CLAIM_REPLIES
 DATES = re.compile(
     r"\b(?:today|tomorrow|this week|next week|working days|business days|within|by \w+day)\b", re.I
 )
-PROMISES = re.compile(r"\bwill be (?:approved|paid|covered)\b|\byou(?:'ll| will) (?:get|receive)\b", re.I)
+PROMISES = re.compile(
+    r"\bwill be (?:approved|paid|covered)\b|\byou(?:'ll| will) (?:get|receive)\b", re.I
+)
 
 # [question, claim, status it is put in, words the reply must carry]
 CLAIMS = [
     ("Where is my claim CLM-010005?", "CLM-010005", "registered", ["registered", "assessor"]),
     ("Where is my claim CLM-010006?", "CLM-010006", "documents_pending", ["2", "documents"]),
     ("Where is my claim CLM-010007?", "CLM-010007", "under_assessment", ["under assessment"]),
-    ("Where is my claim CLM-010001?", "CLM-010001", "approved", ["approved", "8,750", "not been paid"]),
+    (
+        "Where is my claim CLM-010001?",
+        "CLM-010001",
+        "approved",
+        ["approved", "8,750", "not been paid"],
+    ),
     ("Where is my claim CLM-010008?", "CLM-010008", "rejected", ["rejected"]),
     ("Where is my claim CLM-010002?", "CLM-010002", "paid", ["paid", "6,800"]),
     ("Where is my claim CLM-010005?", "CLM-010005", "withdrawn", ["withdrawn"]),
 ]
 
 
-@pytest.mark.discharges("P-CLAIM-STATUS", "P-DIRECT", "P-DIRECT-READS", "P-NO-PROMISE", "op:get_claim", "AHC-0100")
-@pytest.mark.parametrize(("words", "claim", "status", "carries"), CLAIMS, ids=[c[2] for c in CLAIMS])
+@pytest.mark.discharges(
+    "P-CLAIM-STATUS", "P-DIRECT", "P-DIRECT-READS", "P-NO-PROMISE", "op:get_claim", "AHC-0100"
+)
+@pytest.mark.parametrize(
+    ("words", "claim", "status", "carries"), CLAIMS, ids=[c[2] for c in CLAIMS]
+)
 async def test_claim_status_is_told_from_the_claim_and_nothing_else(
     words: str, claim: str, status: str, carries: list[str]
 ) -> None:
@@ -57,14 +68,24 @@ def test_every_claim_state_has_its_own_words() -> None:
 
 # [question, what the reply carries, what it never says]
 PAYOUTS = [
-    ("has the money for CLM-010001 come through?", ["approved", "8,750", "not been made"], ["is on its way"]),
+    (
+        "has the money for CLM-010001 come through?",
+        ["approved", "8,750", "not been made"],
+        ["is on its way"],
+    ),
     ("has the money for CLM-010002 come through?", ["paid", "6,800"], ["not been"]),
-    ("has the money for CLM-010007 come through?", ["under assessment", "no payment"], ["approved for"]),
+    (
+        "has the money for CLM-010007 come through?",
+        ["under assessment", "no payment"],
+        ["approved for"],
+    ),
 ]
 
 
 @pytest.mark.discharges("P-PAYOUT-OWED", "P-CLAIM-STATUS", "P-DIRECT", "P-DIRECT-READS")
-@pytest.mark.parametrize(("words", "carries", "never"), PAYOUTS, ids=[p[0].split()[4] for p in PAYOUTS])
+@pytest.mark.parametrize(
+    ("words", "carries", "never"), PAYOUTS, ids=[p[0].split()[4] for p in PAYOUTS]
+)
 async def test_a_payout_question_states_the_status_and_pays_nothing(
     words: str, carries: list[str], never: list[str]
 ) -> None:

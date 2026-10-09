@@ -242,7 +242,7 @@ module agent 'modules/containerapp.bicep' = {
       { name: 'AZURE_APP_CONFIGURATION_ENDPOINT', value: appConfig.outputs.endpoint }
     ]
   }
-  dependsOn: [postgres, monitoring]
+  dependsOn: [postgres]
 }
 
 // azd writes these to .azure/<env>/.env. The first block is also each app's

@@ -44,7 +44,9 @@ def recognised(decision: Route) -> set[str]:
 @pytest.mark.discharges(
     "P-DIRECT", "AHC-0100", "esc:asked-for-human", "esc:injury-reported", "esc:outside-scope"
 )
-@pytest.mark.parametrize(("intent", "answered_by", "example"), EXAMPLES, ids=[e[2] for e in EXAMPLES])
+@pytest.mark.parametrize(
+    ("intent", "answered_by", "example"), EXAMPLES, ids=[e[2] for e in EXAMPLES]
+)
 def test_every_aoas_example_is_read_as_its_intent(
     intent: str, answered_by: str, example: str
 ) -> None:
@@ -62,8 +64,14 @@ def test_every_aoas_example_is_read_as_its_intent(
 
 
 @pytest.mark.discharges(
-    "R-COVERAGE", "R-LIABILITY", "R-OTHER-HOLDER", "R-POLICY-CHANGE", "R-FRAUD", "R-LEGAL",
-    "P-DIRECT", "AHC-0100",
+    "R-COVERAGE",
+    "R-LIABILITY",
+    "R-OTHER-HOLDER",
+    "R-POLICY-CHANGE",
+    "R-FRAUD",
+    "R-LEGAL",
+    "P-DIRECT",
+    "AHC-0100",
 )
 @pytest.mark.parametrize(("rule", "example"), REFUSALS, ids=[r[1] for r in REFUSALS])
 def test_every_refusal_example_is_refused_by_its_own_rule(rule: str, example: str) -> None:
@@ -72,7 +80,11 @@ def test_every_refusal_example_is_refused_by_its_own_rule(rule: str, example: st
 
 
 DIRECT = [(n, e) for n, a, e in EXAMPLES if a == "direct"]
-SAMPLE_REF = {"claim_status": "CLM-010006", "payout_status": "CLM-010001", "policy_status": "POL-010001"}
+SAMPLE_REF = {
+    "claim_status": "CLM-010006",
+    "payout_status": "CLM-010001",
+    "policy_status": "POL-010001",
+}
 
 
 @pytest.mark.discharges("P-DIRECT", "P-DIRECT-READS", "AHC-0100")

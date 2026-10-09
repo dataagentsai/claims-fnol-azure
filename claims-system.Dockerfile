@@ -13,10 +13,10 @@
 #   worlds   the FNOL world the seed reads (claims_system.__main__.WORLD,
 #            ../clean-ai-engineering/gates/motor-claims-fnol/worlds/...)
 #
-# On start: migrate (idempotent DDL), seed, serve on 9050. The seed is an
-# upsert, so the seeded claims return to their seeded state on every start,
-# and with scale-to-zero every cold start is one (FINDINGS F-45). Claims the
-# demo registered (CLM-019xxx) are kept.
+# On start: migrate (idempotent DDL), seed only a never-seeded database
+# (`--if-empty`), serve on 9050. With scale-to-zero every cold start is a
+# start, so seeding every time would reset the demo claims (FINDINGS F-45);
+# reset on purpose with `python -m claims_system seed --fresh`.
 #
 # Reads CLAIMS_DATABASE_URL and CLAIMS_DBOS_DATABASE_URL from the environment
 # (Container Apps fills both from Key Vault).
@@ -48,4 +48,4 @@ ENV PATH=/app/venv/bin:$PATH \
     PYTHONPATH=/app/claims-fnol-azure/src
 USER 10001
 EXPOSE 9050
-CMD ["sh", "-c", "python -m claims_system migrate && python -m claims_system seed && exec python -m claims_system serve --host 0.0.0.0 --port 9050"]
+CMD ["sh", "-c", "python -m claims_system migrate && python -m claims_system seed --if-empty && exec python -m claims_system serve --host 0.0.0.0 --port 9050"]

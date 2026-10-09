@@ -51,7 +51,14 @@ async def no_wait(_seconds: float) -> None:
 
 # [failure, times it happens, fault kind, attempts made, what the caller gets]
 FAILURES = [
-    ("throttled once", ModelThrottled("slow down", retry_after=0.0), 1, "unreachable", 2, Completed),
+    (
+        "throttled once",
+        ModelThrottled("slow down", retry_after=0.0),
+        1,
+        "unreachable",
+        2,
+        Completed,
+    ),
     ("unavailable once", ModelUnavailable("down"), 1, "unreachable", 2, Completed),
     ("unavailable throughout", ModelUnavailable("down"), 99, "unreachable", 3, Failed),
     ("malformed", ModelMalformed("garbled", raw="{not json"), 99, "malformed", 1, Failed),
@@ -61,7 +68,9 @@ FAILURES = [
 
 @pytest.mark.discharges("AHC-0001", "AHC-0005", "AHC-0021", "AHC-0024", "AHC-0110", "AHC-0017")
 @pytest.mark.parametrize(
-    ("why", "failure", "times", "fault", "attempts", "outcome"), FAILURES, ids=[f[0] for f in FAILURES]
+    ("why", "failure", "times", "fault", "attempts", "outcome"),
+    FAILURES,
+    ids=[f[0] for f in FAILURES],
 )
 async def test_each_provider_failure_has_its_declared_outcome(
     why: str, failure: AgentFailure, times: int, fault: str, attempts: int, outcome: type
@@ -73,7 +82,9 @@ async def test_each_provider_failure_has_its_declared_outcome(
     assert isinstance(result, outcome), result
     assert flaky.calls == attempts
     if isinstance(result, Failed):
-        assert "garbled" not in result.customer_message and "{not json" not in result.customer_message
+        assert (
+            "garbled" not in result.customer_message and "{not json" not in result.customer_message
+        )
 
 
 # [words, the typed result with no desk wired, whether the model is asked]

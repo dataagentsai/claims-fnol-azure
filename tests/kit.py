@@ -80,7 +80,5 @@ async def agent(
     store unless one is passed (an empty script raises if the model is called)."""
     scripted = ScriptedClient(answers)
     async with claims_system(world) as tools:
-        built = ep.build(
-            llm=llm or scripted, tools=tools, store=InMemoryCheckpointStore(), **build
-        )
+        built = ep.build(llm=llm or scripted, tools=tools, store=InMemoryCheckpointStore(), **build)
         yield built, scripted

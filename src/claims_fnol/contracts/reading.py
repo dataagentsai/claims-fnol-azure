@@ -76,9 +76,7 @@ def claimed_states(sentence: str, *, present_only: bool = False) -> set[str]:
     return said
 
 
-VOCABULARY = Vocabulary(
-    identifier=REFERENCE, identifiers=references, claimed_states=claimed_states
-)
+VOCABULARY = Vocabulary(identifier=REFERENCE, identifiers=references, claimed_states=claimed_states)
 """What the harness's checks read as an identifier and a claimed state."""
 
 __all__ = [

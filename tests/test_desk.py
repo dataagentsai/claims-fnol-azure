@@ -59,8 +59,12 @@ DECIDERS = [
 ]
 
 
-@pytest.mark.discharges("P-APPROVER", "P-APPROVAL-FINAL", "P-APPROVAL-QUEUE", "ext:approval_queue", "AHC-0057")
-@pytest.mark.parametrize(("by", "by_customer", "refused"), DECIDERS, ids=["handler", "policyholder", "linked login"])
+@pytest.mark.discharges(
+    "P-APPROVER", "P-APPROVAL-FINAL", "P-APPROVAL-QUEUE", "ext:approval_queue", "AHC-0057"
+)
+@pytest.mark.parametrize(
+    ("by", "by_customer", "refused"), DECIDERS, ids=["handler", "policyholder", "linked login"]
+)
 async def test_a_payout_is_decided_once_and_never_by_its_policyholder(
     by: str, by_customer: str | None, refused: str
 ) -> None:

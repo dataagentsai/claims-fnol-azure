@@ -45,7 +45,11 @@ def read(row: dict[str, object], name: str = "get_claim") -> ToolResult:
     return ToolResult(name=name, text="", structured={"found": True, **row})
 
 
-PAID = ToolResult(name="issue_payout", text="", structured={"status": "paid", "claim_id": "CLM-010003", "amount": "25000"})
+PAID = ToolResult(
+    name="issue_payout",
+    text="",
+    structured={"status": "paid", "claim_id": "CLM-010003", "amount": "25000"},
+)
 REFUSED_WITHDRAW = ToolResult(
     name="withdraw_claim", text="", structured={"allowed": False, "reason": "under_assessment"}
 )
@@ -58,14 +62,26 @@ PROMISES = [
     ("promises cover", "Don't worry, a flood is fully covered on your policy.", (), True),
     ("promises payment", "Your claim will be paid next week.", (), True),
     ("says what you will get", "You will get the full repair cost back.", (), True),
-    ("explains, does not promise", "I cannot say whether a claim is covered; only the assessment decides that.", (), False),
+    (
+        "explains, does not promise",
+        "I cannot say whether a claim is covered; only the assessment decides that.",
+        (),
+        False,
+    ),
     ("states the status", "CLM-010007 is under assessment.", (UNDER,), False),
-    ("states an approval that exists", "CLM-010003 is approved for ₹25,000.", (read({"id": "CLM-010003", "status": "approved", "approved_amount": 25000}),), False),
+    (
+        "states an approval that exists",
+        "CLM-010003 is approved for ₹25,000.",
+        (read({"id": "CLM-010003", "status": "approved", "approved_amount": 25000}),),
+        False,
+    ),
 ]
 
 
 @pytest.mark.discharges("P-NO-PROMISE", "R-COVERAGE", "AHC-0094")
-@pytest.mark.parametrize(("why", "reply", "results", "blocked"), PROMISES, ids=[p[0] for p in PROMISES])
+@pytest.mark.parametrize(
+    ("why", "reply", "results", "blocked"), PROMISES, ids=[p[0] for p in PROMISES]
+)
 def test_no_reply_promises_cover_or_money(
     why: str, reply: str, results: tuple[ToolResult, ...], blocked: bool
 ) -> None:
@@ -73,18 +89,42 @@ def test_no_reply_promises_cover_or_money(
 
 
 EFFECTS = [
-    ("payout claimed, and made", "The payment of ₹25,000 for CLM-010003 has been issued.", (PAID,), False),
+    (
+        "payout claimed, and made",
+        "The payment of ₹25,000 for CLM-010003 has been issued.",
+        (PAID,),
+        False,
+    ),
     ("payout claimed, never made", "The payment for CLM-010001 has been issued.", (), True),
-    ("withdrawal claimed, refused", "Claim CLM-010007 has been withdrawn.", (REFUSED_WITHDRAW,), True),
-    ("a refusal claims nothing", "I couldn't withdraw CLM-010007: the assessor has started.", (REFUSED_WITHDRAW,), False),
+    (
+        "withdrawal claimed, refused",
+        "Claim CLM-010007 has been withdrawn.",
+        (REFUSED_WITHDRAW,),
+        True,
+    ),
+    (
+        "a refusal claims nothing",
+        "I couldn't withdraw CLM-010007: the assessor has started.",
+        (REFUSED_WITHDRAW,),
+        False,
+    ),
     ("registration claimed, never made", "I've registered your claim.", (), True),
-    ("document claimed, never attached", "The police report is now attached to CLM-010006.", (), True),
+    (
+        "document claimed, never attached",
+        "The police report is now attached to CLM-010006.",
+        (),
+        True,
+    ),
     ("already paid is a status, not a claim", "CLM-010002 was already paid.", (), False),
 ]
 
 
-@pytest.mark.discharges("P-NO-PROMISE", "P-PAYOUT", "P-WITHDRAW", "P-FNOL", "P-DOCUMENTS", "AHC-0094")
-@pytest.mark.parametrize(("why", "reply", "results", "blocked"), EFFECTS, ids=[e[0] for e in EFFECTS])
+@pytest.mark.discharges(
+    "P-NO-PROMISE", "P-PAYOUT", "P-WITHDRAW", "P-FNOL", "P-DOCUMENTS", "AHC-0094"
+)
+@pytest.mark.parametrize(
+    ("why", "reply", "results", "blocked"), EFFECTS, ids=[e[0] for e in EFFECTS]
+)
 def test_an_effect_is_claimed_only_when_it_happened(
     why: str, reply: str, results: tuple[ToolResult, ...], blocked: bool
 ) -> None:
@@ -110,7 +150,9 @@ GROUNDING = [
 
 
 @pytest.mark.discharges("P-NO-PROMISE", "AHC-0094")
-@pytest.mark.parametrize(("why", "reply", "results", "blocked"), GROUNDING, ids=[g[0] for g in GROUNDING])
+@pytest.mark.parametrize(
+    ("why", "reply", "results", "blocked"), GROUNDING, ids=[g[0] for g in GROUNDING]
+)
 def test_every_reference_and_figure_is_grounded(
     why: str, reply: str, results: tuple[ToolResult, ...], blocked: bool
 ) -> None:
@@ -118,15 +160,27 @@ def test_every_reference_and_figure_is_grounded(
 
 
 SUPERSEDED = [
-    ("says the read it superseded", "Your claim CLM-010007 is still under assessment, and yes, you can send the photo.", (UNDER, APPROVED), True),
+    (
+        "says the read it superseded",
+        "Your claim CLM-010007 is still under assessment, and yes, you can send the photo.",
+        (UNDER, APPROVED),
+        True,
+    ),
     ("says the latest read", "Your claim CLM-010007 is approved.", (UNDER, APPROVED), False),
     ("negated", "CLM-010007 is not under assessment any more.", (UNDER, APPROVED), False),
-    ("neither has been paid", "CLM-010007 is approved; neither has been paid yet.", (APPROVED,), False),
+    (
+        "neither has been paid",
+        "CLM-010007 is approved; neither has been paid yet.",
+        (APPROVED,),
+        False,
+    ),
 ]
 
 
 @pytest.mark.discharges("AHC-0117", "P-CLAIM-STATUS", "AHC-0094")
-@pytest.mark.parametrize(("why", "reply", "results", "blocked"), SUPERSEDED, ids=[s[0] for s in SUPERSEDED])
+@pytest.mark.parametrize(
+    ("why", "reply", "results", "blocked"), SUPERSEDED, ids=[s[0] for s in SUPERSEDED]
+)
 def test_a_status_the_latest_read_contradicts_is_never_said(
     why: str, reply: str, results: tuple[ToolResult, ...], blocked: bool
 ) -> None:
@@ -142,7 +196,9 @@ PII = [
 
 @pytest.mark.discharges("AHC-0094")
 @pytest.mark.parametrize(("why", "reply", "blocked"), PII, ids=[p[0] for p in PII])
-def test_account_and_licence_numbers_are_never_read_back(why: str, reply: str, blocked: bool) -> None:
+def test_account_and_licence_numbers_are_never_read_back(
+    why: str, reply: str, blocked: bool
+) -> None:
     assert no_pii_echo(said(reply)).blocked is blocked
 
 
@@ -153,18 +209,56 @@ def asking(tool: str, args: dict[str, object], consented: frozenset[str]) -> Con
 
 # [why, tool, arguments, what the policyholder's words consented to, allowed]
 OWN_WORDS = [
-    ("asked to withdraw this claim", "withdraw_claim", {"id": "CLM-010005"}, {"withdraw_claim:CLM-010005"}, True),
-    ("planted: withdraw a claim only asked about", "withdraw_claim", {"id": "CLM-010005"}, {"submit_document:CLM-010005"}, False),
-    ("planted: pay a different claim", "request_payout", {"id": "CLM-010003"}, {"request_payout:CLM-010001"}, False),
-    ("asked for this payout", "request_payout", {"id": "CLM-010001"}, {"request_payout:CLM-010001"}, True),
-    ("reported naming the car, not the policy", "register_claim", {"id": "POL-010001", "incident_type": "flood"}, {"register_claim:*"}, True),
-    ("never reported anything", "register_claim", {"id": "POL-010004", "incident_type": "theft"}, set(), False),
+    (
+        "asked to withdraw this claim",
+        "withdraw_claim",
+        {"id": "CLM-010005"},
+        {"withdraw_claim:CLM-010005"},
+        True,
+    ),
+    (
+        "planted: withdraw a claim only asked about",
+        "withdraw_claim",
+        {"id": "CLM-010005"},
+        {"submit_document:CLM-010005"},
+        False,
+    ),
+    (
+        "planted: pay a different claim",
+        "request_payout",
+        {"id": "CLM-010003"},
+        {"request_payout:CLM-010001"},
+        False,
+    ),
+    (
+        "asked for this payout",
+        "request_payout",
+        {"id": "CLM-010001"},
+        {"request_payout:CLM-010001"},
+        True,
+    ),
+    (
+        "reported naming the car, not the policy",
+        "register_claim",
+        {"id": "POL-010001", "incident_type": "flood"},
+        {"register_claim:*"},
+        True,
+    ),
+    (
+        "never reported anything",
+        "register_claim",
+        {"id": "POL-010004", "incident_type": "theft"},
+        set(),
+        False,
+    ),
     ("a read needs no consent", "get_claim", {"id": "CLM-010005"}, set(), True),
 ]
 
 
 @pytest.mark.discharges("P-OWN-WORDS", "AHC-0116", "AAC-0106")
-@pytest.mark.parametrize(("why", "tool", "args", "consented", "allowed"), OWN_WORDS, ids=[o[0] for o in OWN_WORDS])
+@pytest.mark.parametrize(
+    ("why", "tool", "args", "consented", "allowed"), OWN_WORDS, ids=[o[0] for o in OWN_WORDS]
+)
 def test_an_action_runs_only_on_what_the_policyholders_words_asked_for(
     why: str, tool: str, args: dict[str, object], consented: set[str], allowed: bool
 ) -> None:

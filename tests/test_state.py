@@ -31,7 +31,9 @@ async def test_each_turn_is_checkpointed_whole_and_reads_back_as_written() -> No
         stored = await built.store.latest(conversation.conversation_id)
     assert stored is not None
     assert Conversation.decode(stored) == conversation
-    with pytest.raises(ValueError):  # a record that is not what was written is refused, never guessed at
+    with pytest.raises(
+        ValueError
+    ):  # a record that is not what was written is refused, never guessed at
         Conversation.decode(stored[: len(stored) // 2])
 
 
@@ -49,7 +51,10 @@ RECORDS = [
     ("Where is my claim CLM-010006?", [], {"read": "get_claim:CLM-010006"}),
     (
         "Please withdraw claim CLM-010005, I'll pay myself",
-        [says("", ("withdraw_claim", {"id": "CLM-010005"})), says("Claim CLM-010005 has been withdrawn.")],
+        [
+            says("", ("withdraw_claim", {"id": "CLM-010005"})),
+            says("Claim CLM-010005 has been withdrawn."),
+        ],
         {"done": "withdraw_claim:CLM-010005"},
     ),
     ("Where is my claim CLM-010007? Also, can you send a tow truck?", [], {"concerns": 2}),
@@ -57,13 +62,18 @@ RECORDS = [
 
 
 @pytest.mark.discharges("AHC-0108", "AHC-0118", "P-CONCERNS")
-@pytest.mark.parametrize(("words", "answers", "holds"), RECORDS, ids=["a read", "an effect", "two concerns"])
+@pytest.mark.parametrize(
+    ("words", "answers", "holds"), RECORDS, ids=["a read", "an effect", "two concerns"]
+)
 async def test_a_structured_record_of_the_work_runs_beside_the_transcript(
     words: str, answers: list[object], holds: dict[str, object]
 ) -> None:
     from evals.durable import escalations_for
 
-    async with escalations_for() as waits, agent(answers, escalations=waits.escalations) as (built, _):
+    async with (
+        escalations_for() as waits,
+        agent(answers, escalations=waits.escalations) as (built, _),
+    ):
         _, conversation = await built.handle(words, identity=me())
     facts = conversation.facts
     assert facts.asked == words

@@ -501,3 +501,45 @@ async def test_migrations_apply_once() -> None:
         first = await st.migrate(url)
         second = await st.migrate(url)
     assert first == [name for name, _ in st.migration_files()] and second == []
+
+
+# [name, rows changed after the first seed, a deployed start's seed, the claim's status after]
+RESTARTS = [
+    ("a replica waking keeps what happened", True, ["--if-empty"], "withdrawn"),
+    ("an explicit fresh seed resets the demo", True, ["--fresh"], "registered"),
+    ("an untouched database stays as seeded", False, ["--if-empty"], "registered"),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "changed", "flags", "status"), RESTARTS, ids=[r[0] for r in RESTARTS]
+)
+async def test_a_deployed_start_seeds_only_an_empty_database(
+    name: str, changed: bool, flags: list[str], status: str
+) -> None:
+    from claims_system.__main__ import _seed
+
+    async with throwaway() as url:
+        await st.migrate(url)
+        assert await st.is_empty(url)
+        await _seed(url, fresh=False, if_empty=True)
+        assert not await st.is_empty(url)
+        async with await psycopg.AsyncConnection.connect(url) as conn:
+            claim = (
+                await (
+                    await conn.execute(
+                        "SELECT id FROM claim WHERE status = 'registered' ORDER BY id LIMIT 1"
+                    )
+                ).fetchone()
+            )[0]  # type: ignore[index]
+            if changed:
+                await conn.execute("UPDATE claim SET status = 'withdrawn' WHERE id = %s", (claim,))
+                await conn.commit()
+        await _seed(url, fresh="--fresh" in flags, if_empty="--if-empty" in flags)
+        async with await psycopg.AsyncConnection.connect(url) as conn:
+            now = (
+                await (
+                    await conn.execute("SELECT status FROM claim WHERE id = %s", (claim,))
+                ).fetchone()
+            )[0]  # type: ignore[index]
+    assert now == status

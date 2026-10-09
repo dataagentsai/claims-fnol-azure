@@ -101,9 +101,7 @@ async def _row(
             )
         result = await tools.call(tool, bind_arguments(spec, decision.args), identity, key)
     except ToolUnavailable as exc:
-        return Failed(
-            customer_message=binding.UNREACHABLE, detail=str(exc)
-        )
+        return Failed(customer_message=binding.UNREACHABLE, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — the contract holds here too
         return Failed(
             customer_message="I could not look that up.", detail=f"{type(exc).__name__}: {exc}"

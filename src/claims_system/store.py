@@ -378,6 +378,17 @@ _UPSERT_CLAIM = (
 )
 
 
+async def is_empty(url: str) -> bool:
+    """No policyholder yet: a database the seed has never written to. A deployed
+    claims system seeds only then, so a replica waking from zero keeps every claim
+    and decision made since (owner's decision, 9 Oct 2026; FINDINGS F-45)."""
+    async with await psycopg.AsyncConnection.connect(url) as conn:
+        row = await (
+            await conn.execute("SELECT NOT EXISTS (SELECT 1 FROM policyholder)")
+        ).fetchone()
+    return bool(row and row[0])
+
+
 async def reset(url: str) -> None:
     """Remove every claim the demo made and every remembered answer, leaving the
     seeded rows to be written back by `seed`."""
@@ -389,6 +400,7 @@ async def reset(url: str) -> None:
 
 __all__ = [
     "DECLINED_ACCOUNT",
+    "is_empty",
     "REFUSALS",
     "TRANSIENT",
     "Store",

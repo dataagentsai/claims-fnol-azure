@@ -1,4 +1,4 @@
-"""`python -m claims_system migrate | seed [--fresh] | serve [--port N]`.
+"""`python -m claims_system migrate | seed [--fresh | --if-empty] | serve [--port N]`.
 
 Reads `CLAIMS_DATABASE_URL` (and, to check payouts against the approval wait,
 `CLAIMS_DBOS_DATABASE_URL`) from the environment or `.env`.
@@ -40,7 +40,10 @@ def world_records(path: Path = WORLD) -> dict[str, list[dict[str, Any]]]:
     return records
 
 
-async def _seed(url: str, fresh: bool) -> None:
+async def _seed(url: str, fresh: bool, if_empty: bool = False) -> None:
+    if if_empty and not await st.is_empty(url):
+        print("  seed skipped: the claims system already holds data")
+        return
     if fresh:
         await st.reset(url)
     written = await st.seed(url, world_records(Path(env("CLAIMS_WORLD", str(WORLD)))))
@@ -73,6 +76,9 @@ def main() -> None:
     sub.add_parser("migrate")
     seeding = sub.add_parser("seed")
     seeding.add_argument("--fresh", action="store_true", help="drop claims the demo made")
+    seeding.add_argument(
+        "--if-empty", action="store_true", help="seed only a database never seeded (deployed)"
+    )
     serving = sub.add_parser("serve")
     serving.add_argument("--port", type=int, default=9050)
     serving.add_argument("--host", default="127.0.0.1")
@@ -81,7 +87,7 @@ def main() -> None:
         applied = asyncio.run(st.migrate(env("CLAIMS_DATABASE_URL")))
         print(f"  migrations applied: {', '.join(applied) or 'none (up to date)'}")
     elif args.command == "seed":
-        asyncio.run(_seed(env("CLAIMS_DATABASE_URL"), args.fresh))
+        asyncio.run(_seed(env("CLAIMS_DATABASE_URL"), args.fresh, args.if_empty))
     else:
         _serve(args.port, args.host)
 
