@@ -73,7 +73,7 @@ ul.tasks li{margin:3px 0}
   <a href="#t2b"><span class="pill done">Done</span><b>Tier 2b</b>Checks as plug-ins</a>
   <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
-  <a href="#t4a"><span class="pill next">Planned</span><b>Tier 4a</b>Safe for Azure</a>
+  <a href="#t4a"><span class="pill doing">In progress</span><b>Tier 4a</b>Safe for Azure</a>
   <a href="#t4b"><span class="pill next">Planned</span><b>Tier 4b</b>The evaluation loop</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
   <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–14</b>Router lanes, RAG, Chatwoot, cost, scale</a>
@@ -192,7 +192,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t4a">
-  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill next">Planned · ≈3–4 days · before <code>azd up</code> goes public</span></div>
+  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill doing">In progress · started 10 Oct (A5, A3, A1 first)</span></div>
   <p class="muted">The 10 Oct audit of every page against the code (<code>docs/DESIGN-AUDIT.md</code>, group A). These are where the design is right and the code isn't there yet, on the paths that move money or identify people.</p>
   <ul class="tasks">
     <li><b>A1</b> The claims system verifies the caller's token on every call: an on-behalf-of exchange in the agent, and token checks at the claims server (today it trusts what the agent asserts; F-23)</li>
