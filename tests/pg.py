@@ -9,6 +9,7 @@ that need one are skipped and say why.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -50,10 +51,23 @@ async def throwaway(prefix: str = "claims_test") -> AsyncIterator[str]:
     try:
         yield f"{server}/{name}"
     finally:
-        async with await psycopg.AsyncConnection.connect(
-            f"{server}/postgres", autocommit=True
-        ) as c:
-            await c.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await _drop(server, name)
+
+
+async def _drop(server: str, name: str, attempts: int = 20) -> None:
+    """Drop it, waiting out a backend this role may not end. `WITH (FORCE)` ends
+    our own leftover connections; an autovacuum worker on a database just written
+    belongs to the server's owner, and this role is not given the power to end
+    other roles' sessions on a shared server — so it is waited for instead."""
+    async with await psycopg.AsyncConnection.connect(f"{server}/postgres", autocommit=True) as c:
+        for attempt in range(attempts):
+            try:
+                await c.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+                return
+            except (psycopg.errors.InsufficientPrivilege, psycopg.errors.ObjectInUse):
+                if attempt == attempts - 1:
+                    raise
+                await asyncio.sleep(0.25)
 
 
 __all__ = ["needs_postgres", "server_url", "throwaway"]

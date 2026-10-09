@@ -1,6 +1,7 @@
 # Findings
 
-What building the FNOL agent on `agent_harness` found: Tier 1, 2026-10-08/09.
+What building the FNOL agent on `agent_harness` found: Tier 1, 2026-10-08/09;
+Tier 2 (chat with it on the Mac, real model), 2026-10-09, from F-17.
 Code comments cite these as "FINDINGS F-n". **Route** says where the change
 belongs. Unless the row says otherwise, nothing outside this repo was edited, and each
 was worked around here.
@@ -23,6 +24,16 @@ was worked around here.
 | F-14 | Clothing words remain in the library: `CUSTOMER_SCOPES` (`orders:*`), the `refunds:write` default, "our order system" in a failure reply, `order_id` in freshness and notify. | Library | Own scopes used. **A turn where the claims system is unreachable still says "order system"**, which a policyholder would see. |
 | F-15 | Turn orchestration (`entrypoint`, `promise`, `pending`, `handoff`) is mechanism but lives as an agent seam. | Library | Copied. |
 | F-16 | The status vocabulary read "neither has been paid" as asserting `paid`. | Agent | Fixed in `contracts/reading.py`. |
+| F-17 | The harness's `no_superseded_state` judged a sentence naming a row nobody had read against the one row that was read. The real model's correct FNOL reply, "registered under reference CLM-019002", was blocked as saying POL-010001 is registered, and the policyholder got "I am not able to confirm that". The gates' scripted reply named no reference, so they never met it. | Library | **Fixed**: agent_harness `10ca3d3` (the fallback applies only when the sentence names no row, as its docstring said); a row added to its table; reference suite 1656 passed. |
+| F-18 | gpt-oss-120b writes references with a non-breaking hyphen (U+2011, "CLM‑019002") and puts narrow no-break spaces (U+202F) between words, in replies and potentially in tool arguments. Every pattern that reads a reply (identifiers, statuses, created references) matches the ASCII hyphen, so a correct reply read as naming nothing. | Library (the model boundary) | `entrypoint/plain.py`: `PlainText` normalises hyphens and spaces in every model answer, text and tool arguments, at `build`. Belongs at the harness's typed boundary for every agent. |
+| F-19 | The AOAS says `submit_document` lowers `documents_missing` by one, and that `documents_pending` means at least one is missing; the last document breaks the invariant unless something moves the claim, and the only transition out is the assessor's (`by: external`). | Spec (AOAS) | The claims system moves a `documents_pending` claim whose last document arrives to `under_assessment`. AgentTwin's world does not count documents down (its `not_faithful_about`), so the gates never met it. |
+| F-20 | `serve.build` and `reviewer.build` type their desk parameters as the Temporal classes (`ApprovalDesk`, `EscalationDesk`), not protocols, so the DBOS desks fit only by duck typing. | Library | `type: ignore[arg-type]` in `claims_fnol_app/edge.py`. Works at run time; a protocol in `contracts` would make it checked. |
+| F-21 | After the real model read a claim and then paid it, "has now been paid" was blocked as superseded: the payout tool's answer did not name its row, so the earlier read stayed "latest". The harness's `_latest_states` also recognises a row only by `id` or `order_id` — another clothing word (F-14), and a far end answering with `claim_id` would be invisible to it. | Agent and Library | The payout tool's answer carries `id` (the AOAS: the write's own answer is authoritative). The library's `order_id` is still there. |
+| F-22 | AgentTwin's projection ignores `register_claim.identity` (the same incident reported twice is one claim): it made CLM-019002 and CLM-019003 for one collision. Our claims system returns the open claim's reference again. A scenario that reports twice would pass against one far end and not the other. | AgentTwin | None here; the claims system follows the AOAS. |
+| F-23 | Locally the claims system believes the session the agent asserts, as the AgentTwin world does: the harness's MCP client sends `{customer_id}` and no token without an exchange. Money is still checked at the far end: `issue_payout` must name an approval the claims system reads from the DBOS wait and finds covering the call (granted, unexpired, same policyholder, claim, amount and key, a person above ₹25,000). | Binding (Tier 4) | The `authorise` hook is where Tier 4 verifies an Entra token for the claims system's audience. |
+| F-24 | The library ships the PostgreSQL adapters (`PostgresCheckpointStore`, `PostgresRequests`) but not the tables they write; the DDL lives in the reference agent's `sql/001_schemas.sql`. `agree_on_durability` rightly refuses an in-memory conversation beside DBOS waits, so a second agent must copy the DDL to run at all. | Library | Copied as `claims_fnol_app/migrations/001_agent_state.sql`. |
+| F-25 | The real model wrote "£25,000" for a payout in rupees. No output rule checks the currency symbol: `no_ungrounded_entity` reads ₹, Rs and INR, and bare digits, so the figure was grounded and the pound sign passed. | Agent (an output rule), from the AOAS's `currency: INR` | Not fixed: recorded. A rule refusing any currency other than the AOAS's would replace a right amount in the wrong symbol with "I am not able to confirm that", so the better fix is to say the currency in the prompt and normalise the symbol. |
+| F-26 | The task named `request_payout` and `escalate` among the claims system's operations; the AOAS lists them under `operations` but not under `external.claims_system.operations`. One is the agent's tool on the approval wait (`routes_to: issue_payout`), the other the escalation wait. | Spec (wording) | The claims system serves the eight operations of `external.claims_system`; a test holds its surface to that list. |
 
 ## The reuse measurement (G2.6, second agent)
 
@@ -31,3 +42,24 @@ was worked around here.
   - ~1,110 lines are mechanism copied from the clothing agent with nouns changed (F-2, F-15). Moving them into the library would put reuse at **~90%**.
   - ~1,900 lines are this insurer's own parts: router and concerns, policy rules, direct answers, the ₹25,000 payout policy, escalation wording and rules, vocabulary, binding, config, telemetry names.
 - What would have falsified the reuse decision (T-019): a second agent that had to *edit* a mechanism module. None was edited. The cost showed up instead as **copying** (F-2, F-3, F-15) and **clothing words left in the library** (F-14).
+
+## Smoke check (Tier 2, real model)
+
+`scripts/smoke.py` against the running app (`scripts/dev-up.sh --fresh`), model
+`openai/gpt-oss-120b` on Groq through the harness's Pydantic AI client, 9 Oct 2026.
+Each flow is a fresh conversation; tokens are from the app's `/dev/usage`.
+
+| Flow | Run 1 | Run 3 (after F-17, F-18, F-21) | Turns | Model calls | Tokens in / out |
+|---|---|---|---|---|---|
+| A — report a collision → CLM- reference from the claims system | **fail**: CLM-019002 registered, reply replaced by the safe reply (F-17, F-18) | pass: "registered under reference CLM-019002", status then answered as registered | 2 | 3 (list_policies, register_claim, reply) | 2,869 / 255 |
+| B — payout of CLM-010004 (₹25,001) waits; Asha approves on the desk; paid | pass | pass: 202 and "sent to a claims handler"; one row on the desk; decided `done`; status paid | 3 | 1 (request_payout) | 661 / 52 |
+| C — payout of CLM-010003 (₹25,000) paid at once | **fail** in words: paid, reply replaced by the safe reply (F-21) | pass: paid, nobody asked; reply said "£25,000" (F-25) | 2 | 3 (get_claim, request_payout, reply) | 2,375 / 186 |
+| D — claim status with no model call | pass | pass | 1 | 0 | 0 / 0 |
+
+Run 3 in all: 7 model calls, 5,905 input and 493 output tokens, no rate limit, no
+provider error, each call under a second. Run 2 repeated run 1 with a turn log
+added to find the rules. gpt-oss-120b chose the right tools every time
+(it reads policies before registering and reads the claim before paying) and
+never called `issue_payout` itself. What failed was ours: three readers of its
+replies (F-17, F-18, F-21).
+

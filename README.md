@@ -4,7 +4,8 @@ A motor insurer's claims agent (first notice of loss) on Azure, with Pydantic AI
 
 Specs: `../clean-ai-engineering/drafts/examples/motor-claims-fnol.aoas.yaml` (what it does), `../clean-ai-engineering/stacks/azure.yaml` (what it runs on), `harness-profile.yaml` (this agent's own choices).
 
-Status: Tier 1 done — the agent (`src/claims_fnol`, this insurer's seams on the
+Status: Tier 2 done — you can chat with it on your Mac with the real model
+(see "Run it on your Mac"). Tier 1: the agent (`src/claims_fnol`, this insurer's seams on the
 `agent_harness` library) passes all four gates on a Mac with a scripted model:
 
     cd ../clean-ai-engineering && uv run tools/gates.py ../claims-fnol-azure

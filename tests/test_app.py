@@ -190,3 +190,53 @@ async def test_the_azure_row_names_its_adapters_and_does_not_start() -> None:
         async with compose(Wiring(env="azure", agent_database_url="", claims=None)):
             pass
     assert "APIM" in AZURE and "App Insights" in AZURE
+
+
+# What gpt-oss-120b actually wrote in the first live run (FINDINGS F-17, F-18,
+# F-21): a non-breaking hyphen in every reference, a narrow no-break space, a
+# read of the claim before paying it. Each reply was correct, and each was
+# replaced by "I am not able to confirm that".
+LIVE = [
+    # (case, the model's answers, message, status, the reply must hold)
+    (
+        "a registration reply naming the new claim with a non-breaking hyphen",
+        [
+            says("", ("list_policies", {})),
+            says("", ("register_claim", {"id": "POL‑010001", "incident_type": "collision"})),
+            says(
+                "Your claim has been registered under reference **CLM‑019002**. An assessor "
+                "will review the details of the incident and will be in touch with you shortly."
+            ),
+        ],
+        "A bus hit my car KA-01-AB-1234 this morning. I want to make a claim.",
+        200,
+        "CLM-019002",
+    ),
+    (
+        "a payout reply after reading the claim first",
+        [
+            says("", ("get_claim", {"id": "CLM-010003"})),
+            says("", ("request_payout", {"id": "CLM-010003"})),
+            says(
+                "Your claim CLM‑010003 has now been paid. The payout has been released to "
+                "the account linked to your policy."
+            ),
+        ],
+        "CLM-010003 shows as approved. Can you release the payment please?",
+        200,
+        "has now been paid",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("case", "script", "text", "status", "holds"), LIVE, ids=[c[0] for c in LIVE]
+)
+async def test_the_live_models_correct_replies_reach_the_policyholder(
+    case: str, script: list[ModelResponse], text: str, status: int, holds: str
+) -> None:
+    async with app(script) as a:
+        said = await a.say("rohan", text)
+    body = said.json()
+    assert (said.status_code, body["outcome"]) == (status, "completed"), (case, body)
+    assert holds in body["reply"], case

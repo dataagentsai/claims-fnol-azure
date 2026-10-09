@@ -58,7 +58,7 @@ ul.tasks li{margin:3px 0}
 <main>
 
 <h1>Motor claims FNOL agent on Azure: the plan</h1>
-<p class="muted">From where we are to "it runs end to end in Azure", then what comes after. Last updated <b>8 Oct 2026</b>. This page is updated as each tier finishes; the change log is at the bottom.</p>
+<p class="muted">From where we are to "it runs end to end in Azure", then what comes after. Last updated <b>9 Oct 2026</b>. This page is updated as each tier finishes; the change log is at the bottom.</p>
 
 <div class="card">
   <p><b>In one line:</b> build the agent, prove it on your Mac against the 29 scenarios, then deploy it to Azure on the free tier and walk through every resource yourself.</p>
@@ -69,8 +69,8 @@ ul.tasks li{margin:3px 0}
 <div class="strip">
   <a href="#t0"><span class="pill done">Done</span><b>Tier 0</b>Specs + library</a>
   <a href="#t1"><span class="pill done">Done</span><b>Tier 1</b>Passes the gates on the Mac</a>
-  <a href="#t2"><span class="pill next">Next</span><b>Tier 2</b>Chat with it on the Mac</a>
-  <a href="#t3"><span class="pill next">Planned</span><b>Tier 3</b>Azure resources exist</a>
+  <a href="#t2"><span class="pill done">Done</span><b>Tier 2</b>Chat with it on the Mac</a>
+  <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
   <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–11</b>Router lanes, RAG, Chatwoot, cost, scale</a>
@@ -133,7 +133,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t2">
-  <div class="tierhead"><h3>Tier 2 · You can chat with it on your Mac</h3><span class="pill next">Planned · ≈1 day</span></div>
+  <div class="tierhead"><h3>Tier 2 · You can chat with it on your Mac</h3><span class="pill done">Done · 9 Oct</span></div>
   <ul class="tasks">
     <li>Real model: Groq through the Pydantic AI client</li>
     <li>Real waits: DBOS on local PostgreSQL</li>
@@ -142,7 +142,7 @@ ul.tasks li{margin:3px 0}
     <li>Fix the clothing wording a policyholder could see ("our order system" when the claims system is down; finding F-14)</li>
   </ul>
   <div class="dw"><b>Done when:</b> in the browser you report a collision and get a claim reference; a payout above ₹25,000 waits, and you approve it from the handler page.</div>
-  <p class="muted"><b>Needs from you:</b> your Groq API key.</p>
+  <p><b>Result:</b> ✅ the four flows pass with the real model (gpt-oss-120b on Groq), run over the same HTTP calls the two pages make: a collision reported gets <b>CLM-019002</b> from our claims system; ₹25,001 waits on the handler desk until approved, then is paid; ₹25,000 is paid at once; claim status needs no model call. 7 model calls, 5,905 input and 493 output tokens. The first run failed two of them in words, never in tools: our output rules misread the model's replies (a non-breaking hyphen in every reference, a rule judging the wrong row, a payout answer that did not name its claim). All fixed, two in the shared library. Gates still pass; findings F-17 to F-26 in <code>FINDINGS.md</code>. Run it yourself: README, "Run it on your Mac" (<code>scripts/dev-up.sh</code>, then <code>/signin</code>).</p>
 </div>
 
 <div class="card" id="t3">
@@ -265,6 +265,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>9 Oct 2026</td><td>Tier 2 done: the claims system as our own MCP server on PostgreSQL, Groq through Pydantic AI, DBOS waits, the chat page and the handler desk with a local sign-in, run scripts. Live smoke check passes all four flows. Findings F-17 to F-26; two library fixes (F-14 wording, F-17 rule).</td></tr>
 <tr><td>9 Oct 2026</td><td>Tier 1 done: all four gates pass (29/29 scenarios). Library reuse ~84%, unedited. 16 findings in FINDINGS.md; Tier 11 (library clean-up) added to Phase 2; the claims MCP server and the F-14 wording fix added to Tier 2.</td></tr>
 <tr><td>8 Oct 2026</td><td>Tier 1 started.</td></tr>
 <tr><td>8 Oct 2026</td><td>Plan created. Tier 0 done (specs, world and scenarios, stack profile, <code>agent_harness</code> library at 74.2% reuse, Azure adapters). Router lanes, RAG, full multi-ask handling, cost calculation and Chatwoot placed in Phase 2.</td></tr>

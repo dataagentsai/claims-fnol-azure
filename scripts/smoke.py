@@ -127,11 +127,13 @@ def report_a_collision(run: Run, flow: Flow) -> bool:
         "was hurt but the rear bumper is badly damaged. The car is KA-01-AB-1234. I want to "
         "make a claim.",
     )
-    found = re.search(r"CLM-\d{6}", str(said.get("reply", "")))
+    # Any hyphen the model writes (gpt-oss uses U+2011; the agent normalises it).
+    found = re.search(r"CLM[-\u2010\u2011]\d{6}", str(said.get("reply", "")))
     if status != 200 or found is None:
         return False
-    flow.notes.append(f"reference {found.group(0)}")
-    return "is registered" in run.status_of(flow, found.group(0))
+    reference = "CLM-" + found.group(0)[4:]
+    flow.notes.append(f"reference {reference}")
+    return "is registered" in run.status_of(flow, reference)
 
 
 def large_payout_waits(run: Run, flow: Flow) -> bool:

@@ -125,7 +125,10 @@ def payout_tool(
         if approval.state is ApprovalState.WAITING:
             raise PayoutRequested(approval)
         if approval.state is ApprovalState.DONE:
+            # Named by its row, as every claims-system answer is: this answer is
+            # the latest word on the claim's status (AOAS `consistency`, F-21).
             done = {
+                "id": claim_id,
                 "status": "paid",
                 "approval_id": approval.id,
                 "claim_id": claim_id,

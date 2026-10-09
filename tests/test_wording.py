@@ -16,6 +16,7 @@ from kit import me
 from claims_fnol import binding
 from claims_fnol import entrypoint as ep
 from claims_fnol.contracts import Failed, Identity, ToolUnavailable
+from claims_fnol.entrypoint.plain import plain
 
 
 class Down:
@@ -44,3 +45,19 @@ async def test_an_unreachable_claims_system_is_named_in_the_insurers_words(
     assert isinstance(result, Failed), route
     assert result.customer_message == binding.UNREACHABLE
     assert "order" not in result.customer_message.lower()
+
+
+TYPOGRAPHY = [
+    # (what the model wrote, what the agent reads)
+    ("CLM‑019002", "CLM-019002"),
+    ("claim CLM‐010003", "claim CLM-010003"),
+    ("POL‑010001 is active", "POL-010001 is active"),
+    ("KA‑01‑AB‑1234", "KA-01-AB-1234"),
+    ("an en dash – stays", "an en dash – stays"),
+    ("plain text", "plain text"),
+]
+
+
+@pytest.mark.parametrize(("wrote", "read"), TYPOGRAPHY)
+def test_the_models_hyphens_and_spaces_are_read_plain(wrote: str, read: str) -> None:
+    assert plain(wrote) == read

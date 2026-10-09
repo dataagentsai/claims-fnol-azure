@@ -23,7 +23,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from claims_fnol import entrypoint as ep
 from claims_fnol_app import signin
 from claims_fnol_app.pages import CHAT_PAGE, desk_router
-from claims_fnol_app.usage import Counted
+from claims_fnol_app.usage import Counted, Logged
 from claims_fnol_app.waits import Waits
 
 
@@ -61,7 +61,7 @@ def build(
     """The whole app. One agent, one set of waits, one issuer."""
     verifier = issuer.issuer()
     served = serve.build(
-        agent,
+        Logged(agent),
         issuer=verifier,
         chat_page=CHAT_PAGE,
         # The DBOS desks have the Temporal desks' shape; serve types the latter (F-20).

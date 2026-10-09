@@ -65,6 +65,7 @@ from claims_fnol.entrypoint import consent, direct, promise, reference
 from claims_fnol.entrypoint.handoff import Handoff, HandoffDesk, NoDesk
 from claims_fnol.entrypoint.opening import opening
 from claims_fnol.entrypoint.pending import ApprovalFlow, NoApprovals, PendingWork
+from claims_fnol.entrypoint.plain import PlainText
 from claims_fnol.escalation import rules as t2
 
 Pairs = tuple[tuple[str, str], ...]  # (operation or tool, record): landed, tried or read
@@ -414,7 +415,7 @@ def build(
     if metering is not None:
         metering()  # an unpriced model fails here, at startup — never mid-conversation
     return Agent(
-        llm=llm,
+        llm=PlainText(llm),  # the model's typography, plain before anything reads it (F-18)
         tools=tools,
         deliveries=deliveries,
         store=store,
