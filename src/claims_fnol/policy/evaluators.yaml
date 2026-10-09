@@ -1,0 +1,46 @@
+# Where each of this insurer's checks runs: one request in, one result out
+# (architecture deck, slides 93-94; agent_harness.evals).
+#
+# Moving a check, changing a threshold, an on-fail action or a sample rate is a
+# change to this file and nothing else. A new rule is code once, in
+# claims_fnol.policy.RULES, and then a line here (money_in_rupees, F-25, was
+# added that way). Read at import and checked: an unknown kind, name or field, a
+# slow check at `reply`, or a check placed where its inputs never exist stops
+# the process.
+
+evaluators:
+  no_unclaimed_effect: {kind: rule}
+  no_promise_of_cover: {kind: rule}        # P-NO-PROMISE
+  no_ungrounded_entity: {kind: rule}
+  no_superseded_state: {kind: rule}        # the harness's, AHC-0117
+  no_superseded_claim_state: {kind: rule}  # the same, clause by clause (F-4)
+  no_pii_echo: {kind: rule}
+  money_in_rupees: {kind: rule}            # F-25: never £, $ or €
+  tool_selection: {kind: rule}             # the library's: a golden case's must-call
+  must_include: {kind: rule}               # the library's: a golden case's must-include
+
+positions:
+  # Inline, before the policyholder reads it: a fail is the safe reply. Each runs
+  # on the model's reply; those that need nothing but the reply also run on every
+  # route's (a template's), where there are no tool results to ground against.
+  reply:
+    - {use: no_unclaimed_effect, on_fail: safe_reply}
+    - {use: no_promise_of_cover, on_fail: safe_reply}
+    - {use: no_ungrounded_entity, on_fail: safe_reply}
+    - {use: no_superseded_state, on_fail: safe_reply}
+    - {use: no_superseded_claim_state, on_fail: safe_reply}
+    - {use: no_pii_echo, on_fail: safe_reply}
+    - {use: money_in_rupees, on_fail: safe_reply}
+
+  # After the turn, on what the policyholder was actually sent: a fail is a finding.
+  online:
+    sample: 1.0
+    run:
+      - {use: no_ungrounded_entity, on_fail: alert}
+      - {use: money_in_rupees, on_fail: alert}
+
+  # Over golden cases and scenarios: a pass rate under `min` blocks the release.
+  release:
+    run:
+      - {use: tool_selection, on_fail: block, min: 1.0}
+      - {use: must_include, on_fail: block, min: 1.0}

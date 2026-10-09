@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
+from pathlib import Path
 
 from agent_harness.contracts import ToolResult
+from agent_harness.evals import plan as evaluators
+from agent_harness.evals.rule import RuleSpec
 from agent_harness.policy import (
     ALLOW,
     SAFE_REPLY,
@@ -155,18 +158,56 @@ def no_pii_echo(ctx: Context) -> Verdict:
     return ALLOW
 
 
-OUTPUT_RULES: tuple[Rule, ...] = (
-    no_unclaimed_effect,
-    no_promise_of_cover,
-    no_ungrounded_entity,
-    no_superseded_state,
-    no_superseded_claim_state,
-    no_pii_echo,
+FOREIGN_MONEY = re.compile(
+    r"[£$€]\s*\d|\b(?:GBP|USD|EUR)\s*\d|\b\d[\d,.]*\s*(?:GBP|USD|EUR|pounds?|dollars?|euros?)\b",
+    re.I,
 )
+"""An amount in a currency that is not this insurer's (AOAS `agent.currency: INR`)."""
 
-REPLY_RULES: tuple[Rule, ...] = (no_promise_of_cover, no_pii_echo)
+
+def money_in_rupees(ctx: Context) -> Verdict:
+    """F-25: an amount is stated in rupees (₹, Rs or INR, or bare), never £, $ or €.
+
+    The real model wrote "£25,000" for a payout of ₹25,000, and every rule passed
+    it: the figure was grounded and nothing read the symbol. A right number in
+    the wrong currency is a wrong statement about money, so it is refused like
+    an ungrounded one. Placed by `evaluators.yaml`; saying the currency in the
+    prompt is the fix that makes this rule rarely fire."""
+    found = FOREIGN_MONEY.search(ctx.text)
+    if found:
+        said = found.group(0).strip()
+        return block("money_in_rupees", f"stated an amount as {said!r}; money here is in rupees")
+    return ALLOW
+
+
+GROUNDED = frozenset({"response", "tool_results"})
+"""What a grounding rule needs: the reply, and what the tools returned this turn."""
+
+RULES: dict[str, RuleSpec] = {
+    "no_unclaimed_effect": RuleSpec(no_unclaimed_effect, GROUNDED),
+    "no_promise_of_cover": RuleSpec(no_promise_of_cover),
+    "no_ungrounded_entity": RuleSpec(no_ungrounded_entity, GROUNDED),
+    "no_superseded_state": RuleSpec(no_superseded_state, GROUNDED),
+    "no_superseded_claim_state": RuleSpec(no_superseded_claim_state, GROUNDED),
+    "no_pii_echo": RuleSpec(no_pii_echo),
+    "money_in_rupees": RuleSpec(money_in_rupees),
+}
+"""This insurer's reply rules, each with what it needs: the catalogue
+`evaluators.yaml` places from (Tier 2b). A rule here runs nowhere until the YAML
+puts it at a position; one that needs the tool results runs only on the model's
+reply, because a deterministic route has none to ground against."""
+
+EVALUATORS = Path(__file__).with_name("evaluators.yaml")
+PLAN = evaluators.load(EVALUATORS, rules=RULES)
+"""Where each check runs, read and checked at import: a wrong YAML stops the
+process here, not on the first policyholder."""
+
+OUTPUT_RULES: tuple[Rule, ...] = PLAN.inline("model")
+"""The `reply` position after the model: every evaluator placed there, in order."""
+
+REPLY_RULES: tuple[Rule, ...] = PLAN.inline("every_route")
 """The rules that judge a reply on its own text, on every route — the
-deterministic templates included."""
+deterministic templates included: the `reply` evaluators that need only the reply."""
 
 CONSENTED_TOOLS = frozenset(
     {"withdraw_claim", "request_payout", "register_claim", "submit_document"}
@@ -214,7 +255,9 @@ __all__ = [
     "CONSENTED_TOOLS",
     "DEFAULT_RULES",
     "OUTPUT_RULES",
+    "PLAN",
     "REPLY_RULES",
+    "RULES",
     "SAFE_REPLY",
     "Context",
     "Position",
@@ -222,6 +265,7 @@ __all__ = [
     "Verdict",
     "block",
     "enforce",
+    "money_in_rupees",
     "no_pii_echo",
     "no_promise_of_cover",
     "no_superseded_claim_state",

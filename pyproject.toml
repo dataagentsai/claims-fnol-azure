@@ -110,6 +110,20 @@ source_modules = ["agent_harness"]
 forbidden_modules = ["claims_fnol"]
 
 [[tool.importlinter.contracts]]
+# Tier 2b: the checks' port and registry are the library's and know no agent and
+# no vendor; this agent hands its rule catalogue in (`claims_fnol.policy.RULES`).
+name = "The evaluators know no agent and no vendor"
+type = "forbidden"
+source_modules = ["agent_harness.evals"]
+forbidden_modules = [
+    "claims_fnol", "claims_system", "claims_fnol_app",
+    "openai", "pydantic_ai", "azure", "dbos", "temporalio", "mcp", "psycopg",
+]
+# Telemetry still picks Azure Monitor by an environment variable (Tier 2b
+# audit); the import is lazy and the adapter's own.
+ignore_imports = ["agent_harness.telemetry.azure -> azure"]
+
+[[tool.importlinter.contracts]]
 # Tier 2: the claims system is the insurer's, not the agent's. Neither sees the
 # other; they meet only over MCP, in the composition root (`claims_fnol_app`).
 name = "The agent and the claims system never import each other"
