@@ -25,6 +25,11 @@ bindings:
     adapter: entra-id
     tenant: {env: AZURE_TENANT_ID}
     audience: api://claims-fnol
+    # The app registration's app role (infra/hooks/entra-app.sh) and what it
+    # grants at the desk: the handler reads and closes escalations and decides
+    # approvals (F-30). A role is a job; the desk checks scopes.
+    role_scopes:
+      desk.handler: [escalations:read, escalations:review, approvals:read, approvals:decide]
   tool_runtime:
     adapter: mcp-client
     url: {env: CLAIMS_MCP_URL}

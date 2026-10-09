@@ -13,7 +13,9 @@ Around it, three routes of this app's own:
                   (`app.usage_route`)
 
 No route asks which environment this is: each is mounted for what the composed
-adapters can do or what the overlay says.
+adapters can do or what the overlay says. Every route checks a session with the
+verifier of the identity adapter the overlay chose (`Sessions.verify`), never
+with one issuer's shape (F-30).
 """
 
 from __future__ import annotations
@@ -67,7 +69,10 @@ def build(
     """The whole app. One agent, one set of waits, one identity."""
     served = serve.build(
         Logged(agent),
-        issuer=sessions.issuer,
+        # The identity adapter's own verifier, at /chat, /feedback and the desk
+        # alike: an Entra handler's `roles` and `scp` read as Entra writes them
+        # (FINDINGS F-30), the local and Keycloak issuers' as theirs.
+        verify=sessions.verify,
         chat_page=CHAT_PAGE,
         # The DBOS desks have the Temporal desks' shape; serve types the latter (F-20).
         desk=held.desk,
