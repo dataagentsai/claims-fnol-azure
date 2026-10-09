@@ -294,10 +294,13 @@ def dbos_approvals(system_database_url: str) -> ApprovalLoader:
     DBOS client and no DBOS runtime of this system's own."""
     from dbos import DBOSClient
 
-    client = DBOSClient(system_database_url=system_database_url)
+    held: list[DBOSClient] = []
 
     async def load(approval_id: str) -> Approval | None:
-        found = await client.get_event_async(approval_id, APPROVAL_RECORD, timeout_seconds=0)
+        # Made on first use: the wait's tables exist once the agent has launched.
+        if not held:
+            held.append(DBOSClient(system_database_url=system_database_url))
+        found = await held[0].get_event_async(approval_id, APPROVAL_RECORD, timeout_seconds=0)
         return found if isinstance(found, Approval) else None
 
     return load
