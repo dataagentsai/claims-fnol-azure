@@ -182,6 +182,7 @@ ul.tasks li{margin:3px 0}
     <li>GitHub Actions deploys with a federated login (OIDC): no secrets stored in GitHub; <b>the four gates run before every deploy</b></li>
     <li>First live checks of what was offline only: Entra tokens (plus a policyholder-id claim), Azure PostgreSQL over TLS, APIM's token limit on the Consumption tier (fallback: request rate limits, noted)</li>
     <li>Test policyholders: users in your own Entra tenant</li>
+    <li>Before deploying: the handler desk must check Entra sign-ins with the identity port's own verifier, not Keycloak's shape (finding F-30; today an Entra handler would be refused)</li>
     <li>APIM policy: Content Safety screens the input and output of each model call; its verdicts are recorded as <code>EvalResult</code>s by the <code>guardrail_log</code> plug-in</li>
   </ul>
   <div class="dw"><b>Done when:</b> you sign in at a public URL and report a claim; that conversation's trace is in App Insights with each check's result on it (ours and Content Safety's); the model call is in APIM analytics; spend stays inside the budget.</div>
