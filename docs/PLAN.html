@@ -73,8 +73,10 @@ ul.tasks li{margin:3px 0}
   <a href="#t2b"><span class="pill done">Done</span><b>Tier 2b</b>Checks as plug-ins</a>
   <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
+  <a href="#t4a"><span class="pill next">Planned</span><b>Tier 4a</b>Safe for Azure</a>
+  <a href="#t4b"><span class="pill next">Planned</span><b>Tier 4b</b>The evaluation loop</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
-  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–12</b>Router lanes, RAG, Chatwoot, cost, scale</a>
+  <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–14</b>Router lanes, RAG, Chatwoot, cost, scale</a>
 </div>
 
 <h2>Can it be tested on the Mac?</h2>
@@ -98,7 +100,7 @@ ul.tasks li{margin:3px 0}
 <tr><td><b>Several asks in one message</b> (slide 67)</td><td>Each ask is listed, nothing is silently dropped, and anything not answered is handed on by name (what the clothing agent does today; a scenario checks it).</td><td><span class="pill done">Phase 1 (basic)</span><br><span class="pill later">Phase 2 (full)</span></td><td>The basic rule is reuse and already proven. The full design (spans covering the message, read-only parts in parallel, a key per part, per-part failure reports) is new work.</td></tr>
 <tr><td><b>RAG lane</b>: answering policy-wording questions from retrieved clauses, with citations</td><td>None. A cover question is refused politely and left to the assessor (the AOAS refusal <code>R-COVERAGE</code>).</td><td><span class="pill later">Phase 2</span></td><td>An FNOL agent must not decide cover anyway; RAG needs policy documents, pgvector set-up and its own scenarios.</td></tr>
 <tr><td><b>Chatwoot</b> (web chat + staff desk)</td><td>Our own chat page for policyholders and the harness's own handler page for approvals.</td><td><span class="pill later">Phase 2</span></td><td>Chatwoot needs Redis, a background worker and ~1–2 GB of memory: likely beyond the free Container Apps grant, and not needed to prove the agent. Its adapter and webhook dedupe are new work.</td></tr>
-<tr><td><b>Cost</b> (slides 53, 128, the TCO calculator)</td><td>Per-turn budget enforced (steps, $ ceiling, tokens), cost on every trace, APIM token metrics, the <b>$5 Azure budget alert</b>.</td><td><span class="pill done">Phase 1 (guards)</span><br><span class="pill later">Phase 2 (calculation)</span></td><td>Guards are already in the harness. The calculation (cost per conversation and per outcome from real traces, hybrid vs all-agent, the scale-up estimate) needs real traffic first, which Phase 1 produces.</td></tr>
+<tr><td><b>Cost</b> (slides 53, 128, the TCO calculator)</td><td>Per-turn budget enforced (steps, $ ceiling, tokens), cost on every trace, APIM token metrics, the <b>$10 Azure budget alert</b>.</td><td><span class="pill done">Phase 1 (guards)</span><br><span class="pill later">Phase 2 (calculation)</span></td><td>Guards are already in the harness. The calculation (cost per conversation and per outcome from real traces, hybrid vs all-agent, the scale-up estimate) needs real traffic first, which Phase 1 produces.</td></tr>
 <tr><td>Service Bus turn queue, Web PubSub, outbox</td><td>One request runs one turn.</td><td><span class="pill later">Phase 2</span></td><td>Needed for scale and closed-tab resilience, not for one user in dev.</td></tr>
 <tr><td>Teams adaptive cards for handlers</td><td>Handler page in the browser.</td><td><span class="pill later">Phase 2</span></td><td>Needs a Bot Service registration; the decision itself is the same.</td></tr>
 <tr><td><b>Checks as plug-ins</b> (deck slides 93–94): one <code>EvalRequest</code> in, one <code>EvalResult</code> out, every check placed by <code>evaluators.yaml</code></td><td>The port, the registry and the YAML, with our own rules as the first plug-ins at three positions: <i>reply</i> (inline, blocks), <i>online</i> (after the turn), <i>release</i> (CI gate). Startup refuses a slow check at an inline position or an unknown name.</td><td><span class="pill next">Phase 1 (Tier 2b)</span></td><td>It is the shape every later check plugs into; building it after Azure would mean wiring the checks twice. It is local library work: no Azure, no cost.</td></tr>
@@ -189,6 +191,36 @@ ul.tasks li{margin:3px 0}
   <p class="muted"><b>Needs from you:</b> approve adding the deploy login to the <code>claims-fnol-azure</code> repo.</p>
 </div>
 
+<div class="card" id="t4a">
+  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill next">Planned · ≈3–4 days · before <code>azd up</code> goes public</span></div>
+  <p class="muted">The 10 Oct audit of every page against the code (<code>docs/DESIGN-AUDIT.md</code>, group A). These are where the design is right and the code isn't there yet, on the paths that move money or identify people.</p>
+  <ul class="tasks">
+    <li><b>A1</b> The claims system verifies the caller's token on every call: an on-behalf-of exchange in the agent, and token checks at the claims server (today it trusts what the agent asserts; F-23)</li>
+    <li><b>A2</b> Policyholder sign-in with Entra (code flow + PKCE), the policyholder-id claim, and a sessions table for refresh tokens (F-43)</li>
+    <li><b>A3</b> Our own <code>approvals</code> and <code>escalations</code> tables behind an interface (id = DBOS workflow id, <code>args_digest</code>); the claims system reads ours, never DBOS's internal tables</li>
+    <li><b>A4</b> A database role per job: the claims system reads approvals only; no app uses the admin login</li>
+    <li><b>A5</b> A tool's idempotency key comes from the message, not the run, so a crash mid-turn can't register a claim twice</li>
+    <li><b>A6</b> A config port with an App Configuration adapter; the ₹25,000 limit read from it by the agent <i>and</i> the claims system (F-35)</li>
+    <li><b>A7</b> Container Apps revisions in Multiple mode, for the canary exercise</li>
+    <li><b>A8</b> The model allow-list in the APIM policy</li>
+    <li><b>A9</b> The <code>guardrail_log</code> evaluator: Content Safety's verdicts recorded as check results</li>
+    <li><b>A11–A13</b> Security basics: a pre-model injection rule and a post-tool hidden-instruction rule (both positions are empty today); Aadhaar and PAN in redaction and <code>no_pii_echo</code>; a kill switch per agent</li>
+    <li><b>A10</b> (already Tier 4) the gates in GitHub Actions before every deploy</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> each item has a table-driven test, and both agents still pass all four gates; a forged session is refused by the claims server.</div>
+</div>
+
+<div class="card" id="t4b">
+  <div class="tierhead"><h3>Tier 4b · The evaluation loop: rule → finding → alert → dashboard</h3><span class="pill next">Planned · ≈3 days</span></div>
+  <p class="muted">Audit group B. Makes "one rule library, three speeds" true in code, then gives it its cheapest Azure home.</p>
+  <ul class="tasks">
+    <li><b>B1</b> One rule library: the 24 watch rules become <code>rule</code>-kind evaluators placed at <code>online</code> in <code>evaluators.yaml</code>; the clothing agent's online findings unchanged</li>
+    <li><b>B2</b> The watch job calls the <code>online</code> runner; the gates call the <code>release</code> runner</li>
+    <li><b>B3</b> For FNOL on Azure: its own online rule set (claims words); a findings table in PostgreSQL; a Container Apps Job reading App Insights (KQL); log alerts for the page-level rules and the canary; an Azure Workbook with the four questions; a canary job with a synthetic policyholder. All in Bicep, each price checked first.</li>
+  </ul>
+  <div class="dw"><b>Done when:</b> moving a rule between <code>online</code> and <code>reply</code> is a one-line YAML change; a planted bad reply in Azure produces a finding, fires an alert and shows on the Workbook.</div>
+</div>
+
 <div class="card" id="t5">
   <div class="tierhead"><h3>Tier 5 · Your guided tour</h3><span class="pill next">Planned · ≈1 day</span></div>
   <ul class="tasks">
@@ -248,7 +280,11 @@ ul.tasks li{margin:3px 0}
     <li>Teams cards for handlers; Content Safety at the edge</li>
     <li>Foundry models behind APIM; Entra External ID for policyholders</li>
     <li>Costed first: Chatwoot and Service Bus are where the free tier likely ends</li>
-  </ul>
+      <li><i>From the audit:</i> APIM backend pool and circuit breaker; token metrics by agent, model and tier; MCP servers behind APIM</li>
+    <li>Model in an India region (Foundry) and the processing region recorded on every call (AHC-0092)</li>
+    <li>Escalation states assigned / returned to agent, and re-route on SLA; a separate identity for the approval workflow with <code>payouts.issue</code></li>
+    <li>Streaming replies; turn priority, deadline and one running turn per conversation; wire the Chatwoot adapter the library already has</li>
+</ul>
 </div>
 </div>
 
@@ -260,7 +296,10 @@ ul.tasks li{margin:3px 0}
     <li>Remove the clothing words still in the library: scopes, defaults, <code>order_id</code> (F-14)</li>
     <li>Make it possible to extend: redaction patterns, the session field name, created references kept in the trace, judging per clause (F-4, F-5, F-8, F-10)</li>
     <li>Spec gaps: refusal vs handoff order, registration plate as "a named policy" (F-6, F-7)</li>
-  </ul>
+      <li><i>From the audit:</i> retention and erasure wired for FNOL, reaching DBOS records and the claims database</li>
+    <li>PII masking before the model; row-level security with <code>agent_id</code>, <code>tenant</code>, <code>retain_until</code>; a <code>conversations</code> table</li>
+    <li>The compensation (saga) table actually used (F-12); <code>no_invented_date</code>, <code>no_unauthorised_offer</code>; one repair attempt for malformed model output</li>
+</ul>
 </div>
 
 <div class="card">
@@ -271,6 +310,27 @@ ul.tasks li{margin:3px 0}
     <li>Online watch on Azure: a Container Apps Job reading App Insights (KQL), the same rule library, findings in PostgreSQL keyed by verdict id (slides 98–99)</li>
     <li>Our free replacements where they are as good (slide 92): tool selection and input checks from golden cases, Presidio for leakage, logged guardrail results on 100% of turns</li>
     <li>Alert rules and the four-question dashboard (Managed Prometheus and Grafana: a production cost, priced first)</li>
+      <li><i>From the audit:</i> pydantic-evals as the release runner behind the <code>Evaluator</code> port; the eval report; the daily cost engine</li>
+    <li>Production turns → golden cases, and shadow mode</li>
+    <li>Pre-commit, a pytest-cov ratchet, vcrpy for tools, consumer contract tests for MCP servers, PyRIT / promptfoo / garak red-team packs</li>
+</ul>
+</div>
+
+<div class="card">
+  <div class="tierhead"><h3>Tier 13 · Production hardening</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>Environments: test, UAT and production, each from the same Bicep</li>
+    <li>Zone redundancy, PostgreSQL HA and geo backups, private endpoints, a paired region</li>
+    <li>PIM for approvers, Defender for AI, alerts on unusual access; Blob storage for long captured text</li>
+    <li>Azure Load Testing at 3× storm peak, and live failure drills (kill a worker, database failover, deploy mid-conversation, APIM 429s)</li>
+  </ul>
+</div>
+<div class="card">
+  <div class="tierhead"><h3>Tier 14 · The model layer, version 2</h3><span class="pill later">Phase 2</span></div>
+  <ul class="tasks">
+    <li>Model contract v2 (tool choice, cache breakpoints, content parts, structured output, normalised stop reasons, context-too-long and content-refused failures)</li>
+    <li>An Anthropic adapter; the ModelSelector: a multi-model golden run and a decision rule, model per job</li>
+    <li>Decide on a fallback model behind <code>ResilientLLM</code></li>
   </ul>
 </div>
 
@@ -297,6 +357,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>10 Oct 2026</td><td>Design audit: all 173 pages of the series checked against the code (<code>docs/DESIGN-AUDIT.md</code>). Added <b>Tier 4a</b> (safe for Azure: token checks at the claims server, Entra sign-in, our own approvals tables, database roles, crash-safe idempotency keys, App Configuration, revisions, allow-list, Content Safety results, security basics), <b>Tier 4b</b> (one rule library; rule → finding → alert → dashboard on Azure), <b>Tiers 13–14</b> (production hardening; model layer v2), and the audit items owned by no tier to Tiers 10–12. Fixed the $5/$10 contradiction.</td></tr>
 <tr><td>9 Oct 2026</td><td>Azure tools installed (Azure CLI 2.91, azd 1.35, Bicep 0.48 via <code>az bicep install</code>). <code>infra/main.bicep</code> compiles clean. Owner decisions on F-39/40/41/45/46 recorded in FINDINGS.md: database password in Key Vault for dev, Content Safety fails open (marked and counted), scale to zero with seeding only an empty database, South India screening accepted. Waiting on the Pay-As-You-Go subscription.</td></tr>
 <tr><td>9 Oct 2026</td><td><b>Tier 3 written, not yet run</b>: <code>infra/</code> (Bicep, one module per resource), <code>azure.yaml</code>, hooks, two Dockerfiles, checked offline by <code>tests/test_infra.py</code>; <code>az</code>/<code>azd</code>/<code>bicep</code> not installed, so compiling and <code>azd up</code> wait for the owner. APIM Consumption has no token limit (request rate instead, F-39) and Content Safety is called by <code>send-request</code> (F-40). <b>F-30 fixed</b> (the desk verifies through the identity port). Findings F-39 to F-47.</td></tr>
 <tr><td>9 Oct 2026</td><td><b>Tier 2b done</b>: <code>agent_harness.evals</code> (the Evaluator port, <code>evaluators.yaml</code>, rule kind, stub kinds) and <code>agent_harness.adapters</code> (registry, profile + overlay composition, contract tables per port); FNOL composition root on overlays; <code>money_in_rupees</code>. Findings F-27 to F-38.</td></tr>
