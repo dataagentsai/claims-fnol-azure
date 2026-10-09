@@ -70,8 +70,8 @@ ul.tasks li{margin:3px 0}
   <a href="#t0"><span class="pill done">Done</span><b>Tier 0</b>Specs + library</a>
   <a href="#t1"><span class="pill done">Done</span><b>Tier 1</b>Passes the gates on the Mac</a>
   <a href="#t2"><span class="pill done">Done</span><b>Tier 2</b>Chat with it on the Mac</a>
-  <a href="#t2b"><span class="pill next">Next</span><b>Tier 2b</b>Checks as plug-ins</a>
-  <a href="#t3"><span class="pill next">Planned</span><b>Tier 3</b>Azure resources exist</a>
+  <a href="#t2b"><span class="pill done">Done</span><b>Tier 2b</b>Checks as plug-ins</a>
+  <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
   <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
   <a href="#phase2" class="ph2"><span class="pill later">Phase 2</span><b>Tiers 6–12</b>Router lanes, RAG, Chatwoot, cost, scale</a>
@@ -151,7 +151,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t2b">
-  <div class="tierhead"><h3>Tier 2b · Checks as plug-ins, on your Mac</h3><span class="pill next">Next · ≈1–2 days</span></div>
+  <div class="tierhead"><h3>Tier 2b · Checks as plug-ins, on your Mac</h3><span class="pill done">Done · 9 Oct</span></div>
   <p class="muted">The deck's judge kit (slides 93–94, asset 15), first slice. Added 9 Oct after the deck's evaluation part was updated.</p>
   <ul class="tasks">
     <li>In <code>agent_harness</code>: <code>EvalRequest</code> (query/messages, response with tool calls, allowed tools, context with source ids, expected for golden cases, meta) and <code>EvalResult</code> (verdict pass/fail/skip/error, score 0–1 and raw score, threshold, reason, evaluator/version/provider, cost, latency)</li>
@@ -161,6 +161,7 @@ ul.tasks li{margin:3px 0}
     <li>The "£25,000" slip (F-25): a money-symbol rule, added by YAML once written, plus a scenario</li>
   </ul>
   <div class="dw"><b>Done when:</b> both agents still pass all four gates with their checks placed by YAML; moving a check or changing a threshold is a YAML-only change, shown by a test.</div>
+  <p><b>Result:</b> ✅ both agents' reply rules are placed by their own <code>evaluators.yaml</code> and judge exactly as the hard-coded lists did (a table holds it); <code>money_in_rupees</code> refuses £, $ and € (F-25). Also built: <b>adapters from configuration</b> — <code>config/local.yaml</code>, <code>test.yaml</code>, <code>azure.yaml</code> name each port's adapter through the library's registry, so the composition root no longer branches on <code>CLAIMS_FNOL_ENV</code>; the Azure overlay is the profile itself and resolves today. Per-port contract tables found a library bug (F-27). Gates: behaviour 29/29, features 64/64 (419 tests), structure 16/16, harness 54 proved. Findings F-27 to F-38.</p>
 </div>
 
 <div class="card" id="t3">
@@ -295,6 +296,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>9 Oct 2026</td><td><b>Tier 2b done</b>: <code>agent_harness.evals</code> (the Evaluator port, <code>evaluators.yaml</code>, rule kind, stub kinds) and <code>agent_harness.adapters</code> (registry, profile + overlay composition, contract tables per port); FNOL composition root on overlays; <code>money_in_rupees</code>. Findings F-27 to F-38.</td></tr>
 <tr><td>9 Oct 2026</td><td>Checked against the deck's updated evaluation part (slides 48–50 journey, 85–118 checks and assurance). Added <b>Tier 2b</b> (checks as plug-ins: <code>EvalRequest</code>/<code>EvalResult</code>, <code>evaluators.yaml</code> with positions), <b>Content Safety F0 at APIM</b> to Tiers 3–4 (no Foundry guardrails while the model is Groq), and <b>Tier 12</b> (Azure evaluators, online watch on Azure). Budget alert raised to $10: the 12-month free offer is used up.</td></tr>
 <tr><td>9 Oct 2026</td><td>Tier 2 done: the claims system as our own MCP server on PostgreSQL, Groq through Pydantic AI, DBOS waits, the chat page and the handler desk with a local sign-in, run scripts. Live smoke check passes all four flows. Findings F-17 to F-26; two library fixes (F-14 wording, F-17 rule).</td></tr>
 <tr><td>9 Oct 2026</td><td>Tier 1 done: all four gates pass (29/29 scenarios). Library reuse ~84%, unedited. 16 findings in FINDINGS.md; Tier 11 (library clean-up) added to Phase 2; the claims MCP server and the F-14 wording fix added to Tier 2.</td></tr>

@@ -18,10 +18,20 @@ Tier 2 — you can chat with it on your Mac:
 - `src/claims_system/` — the claims system as our own MCP server on PostgreSQL
   (the AOAS's eight claims-system operations, plain-SQL migration, seeded from
   the FNOL world).
-- `src/claims_fnol_app/` — the composition root (`CLAIMS_FNOL_ENV=local|test|azure`):
-  Groq through the harness's Pydantic AI client, DBOS waits for payout approvals
-  and escalations, the chat page and the claims handler's desk, local sign-in.
+- `src/claims_fnol_app/` — the composition root: the chat page and the claims
+  handler's desk on whichever adapters the overlay names (Groq through the
+  harness's Pydantic AI client, DBOS waits for payout approvals and escalations,
+  local sign-in, on this Mac).
 - `scripts/dev-up.sh`, `scripts/dev-down.sh`, `scripts/smoke.py`.
+
+Tier 2b — adapters from configuration, checks as plug-ins:
+
+- `config/local.yaml`, `config/test.yaml`, `config/azure.yaml` — one overlay per
+  environment: which adapter fills each port, its settings, secrets by reference
+  only, and why it differs from the profile. `CLAIMS_FNOL_ENV` names the file and
+  nothing else; `agent_harness.adapters` builds what it names.
+- `src/claims_fnol/policy/evaluators.yaml` — where each reply check runs (reply,
+  online, release), read through `agent_harness.evals`; moving one is a YAML edit.
 
 ## Run it on your Mac
 

@@ -5,16 +5,23 @@ under `/ops`; the chat page and the handler page are `claims_fnol_app.pages`,
 handed to it the way the reference agent's `serve`/`reviewer` hand theirs.
 Around it, three routes of this app's own:
 
-    /signin       local test sign-in (local and test only)
+    /signin       local test sign-in, where the identity adapter can sign
+                  (`local-dev`); no other adapter can, so it exists nowhere else
     /opening      what a signed-in policyholder is shown first: their open claims
                   and policies, with no model call (P-OPEN)
-    /dev/usage    model calls and tokens so far (local and test only)
+    /dev/usage    model calls and tokens so far, where the overlay asks for it
+                  (`app.usage_route`)
+
+No route asks which environment this is: each is mounted for what the composed
+adapters can do or what the overlay says.
 """
 
 from __future__ import annotations
 
 from agent_harness import identity as ident
 from agent_harness import serve
+from agent_harness.adapters.identity import Sessions
+from agent_harness.adapters.waits import Waits
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -24,21 +31,20 @@ from claims_fnol import entrypoint as ep
 from claims_fnol_app import signin
 from claims_fnol_app.pages import CHAT_PAGE, desk_router
 from claims_fnol_app.usage import Counted, Logged
-from claims_fnol_app.waits import Waits
 
 
-def _policyholder(request: Request, issuer: ident.Issuer) -> ident.Principal | Response:
+def _policyholder(request: Request, sessions: Sessions) -> ident.Principal | Response:
     header = request.headers.get("authorization", "")
     token = header[7:].strip() if header[:7].lower() == "bearer " else ""
     try:
-        return ident.verify(token, issuer=issuer)
+        return sessions.verify(token)
     except ident.InvalidSession:
         return JSONResponse({"error": "the session token is not valid"}, status_code=401)
 
 
-def opening(agent: ep.Agent, issuer: ident.Issuer) -> Route:
+def opening(agent: ep.Agent, sessions: Sessions) -> Route:
     async def show(request: Request) -> Response:
-        who = _policyholder(request, issuer)
+        who = _policyholder(request, sessions)
         if isinstance(who, Response):
             return who
         if not who.customer_id:
@@ -56,29 +62,29 @@ def usage(counted: Counted) -> Route:
 
 
 def build(
-    agent: ep.Agent, held: Waits, issuer: signin.LocalIssuer, *, counted: Counted, env: str
+    agent: ep.Agent, held: Waits, sessions: Sessions, *, counted: Counted, usage_route: bool
 ) -> Starlette:
-    """The whole app. One agent, one set of waits, one issuer."""
-    verifier = issuer.issuer()
+    """The whole app. One agent, one set of waits, one identity."""
     served = serve.build(
         Logged(agent),
-        issuer=verifier,
+        issuer=sessions.issuer,
         chat_page=CHAT_PAGE,
         # The DBOS desks have the Temporal desks' shape; serve types the latter (F-20).
-        desk=held.desk,  # type: ignore[arg-type]
+        desk=held.desk,
         approvals=held.approvals,
-        approver=held.approver,  # type: ignore[arg-type]
+        approver=held.approver,
         desk_pages=(desk_router,),
     )
-    routes: list[BaseRoute] = [opening(agent, verifier)]
-    if env in ("local", "test"):
+    routes: list[BaseRoute] = [opening(agent, sessions)]
+    if sessions.signer is not None:
         routes += [
             Route("/signin", signin.signin_page, methods=["GET"]),
             Route("/signin", signin.signin, methods=["POST"]),
-            usage(counted),
         ]
+    if usage_route:
+        routes.append(usage(counted))
     app = Starlette(routes=[*routes, Mount("/", app=served)])
-    app.state.local_issuer = issuer
+    app.state.local_issuer = sessions.signer
     return app
 
 

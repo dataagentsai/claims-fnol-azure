@@ -1,30 +1,22 @@
-"""Local sign-in: a test issuer and three test users, for this Mac only.
+"""Local sign-in: three test users, signed by the `local-dev` identity adapter.
 
-The reference agent's way (`reference-agent/evals/issuer.py`): an RS256 key pair
-made once per process, sessions signed with the private half, and the agent
-configured with only the public half, exactly as it would be with a real realm.
-The sign-in page lets a person pick a test user and mints that user's session;
-the link it sends them to carries the token, as the reference agent's printed
-links do. Sessions die with the process: restart, sign in again.
-
-Never for a deployment. The `azure` environment signs in with Entra
-(`agent_harness.identity.entra`, Tier 4), and this module is not wired there.
+The issuer is the library's (`agent_harness.identity.local`, bound by the
+overlay's `identity: local-dev`): an RS256 key made once per process, sessions
+signed with the private half, the agent verifying with the public half exactly
+as it would with a real realm. What is this agent's is who the test users are
+and where each lands. The page is mounted only where the identity adapter can
+sign (`edge.build`), so an overlay binding Entra ID has no sign-in page at all.
+Sessions die with the process: restart, sign in again.
 """
 
 from __future__ import annotations
 
 import html
-import time
 import urllib.parse
-import uuid
-from dataclasses import dataclass, field
-from functools import cached_property
-from typing import Any
+from dataclasses import dataclass
 
-import jwt
 from agent_harness import identity as ident
-from cryptography.hazmat.primitives.asymmetric import rsa
-from jwt.algorithms import RSAAlgorithm
+from agent_harness.identity.local import LocalIssuer
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
@@ -32,7 +24,6 @@ from claims_fnol.binding import POLICYHOLDER_SCOPES
 
 URL = "http://local-issuer.test/realms/claims"
 AUDIENCE = "claims-fnol"
-KID = "local-claims-key"
 HANDLER_SCOPES = ident.REVIEWER_SCOPES | ident.APPROVER_SCOPES
 
 
@@ -53,44 +44,20 @@ USERS = (
 payouts and works the escalation queue."""
 
 
-@dataclass
-class LocalIssuer:
-    """Signs sessions for the test users. The agent sees only `issuer()`."""
-
-    ttl_s: int = 8 * 3600
-    _key: rsa.RSAPrivateKey = field(
-        default_factory=lambda: rsa.generate_private_key(public_exponent=65537, key_size=2048),
-        repr=False,
+def mint(signer: LocalIssuer, user: TestUser) -> str:
+    """A session for a test user, signed by the `local-dev` identity adapter."""
+    return signer.mint(
+        subject=f"login-{user.login}",
+        scopes=POLICYHOLDER_SCOPES if user.policyholder_id else HANDLER_SCOPES,
+        customer_id=user.policyholder_id,
+        name=user.name,
     )
 
-    @cached_property
-    def jwks(self) -> dict[str, Any]:
-        public = RSAAlgorithm.to_jwk(self._key.public_key(), as_dict=True)
-        return {"keys": [{**public, "kid": KID, "use": "sig", "alg": "RS256"}]}
 
-    def issuer(self) -> ident.Issuer:
-        return ident.Issuer(url=URL, audience=AUDIENCE, keys=ident.JWKS(self.jwks))
-
-    def mint(self, user: TestUser) -> str:
-        now = int(time.time())
-        claims: dict[str, Any] = {
-            "sub": f"login-{user.login}",
-            "scp": sorted(POLICYHOLDER_SCOPES if user.policyholder_id else HANDLER_SCOPES),
-            "iss": URL,
-            "aud": AUDIENCE,
-            "iat": now,
-            "exp": now + self.ttl_s,
-            "jti": uuid.uuid4().hex,
-            "name": user.name,
-        }
-        if user.policyholder_id:
-            claims[ident.CLAIM_CUSTOMER] = user.policyholder_id
-        return jwt.encode(claims, self._key, algorithm="RS256", headers={"kid": KID})
-
-    def landing(self, user: TestUser) -> str:
-        """Where a signed-in user goes: the chat, or the handler page."""
-        where = "/" if user.policyholder_id else "/ops/desk"
-        return f"{where}?token={self.mint(user)}"
+def landing(signer: LocalIssuer, user: TestUser) -> str:
+    """Where a signed-in user goes: the chat, or the handler page."""
+    where = "/" if user.policyholder_id else "/ops/desk"
+    return f"{where}?token={mint(signer, user)}"
 
 
 def page() -> str:
@@ -138,8 +105,8 @@ async def signin(request: Request) -> Response:
     chosen = {u.login: u for u in USERS}.get((form.get("login") or [""])[0])
     if chosen is None:
         return HTMLResponse("no such test user", status_code=400)
-    issuer: LocalIssuer = request.app.state.local_issuer
-    return RedirectResponse(issuer.landing(chosen), status_code=303)
+    signer: LocalIssuer = request.app.state.local_issuer
+    return RedirectResponse(landing(signer, chosen), status_code=303)
 
 
-__all__ = ["AUDIENCE", "HANDLER_SCOPES", "URL", "USERS", "LocalIssuer", "TestUser", "signin"]
+__all__ = ["AUDIENCE", "HANDLER_SCOPES", "URL", "USERS", "TestUser", "landing", "mint", "signin"]

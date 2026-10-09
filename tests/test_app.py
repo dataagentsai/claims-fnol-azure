@@ -1,4 +1,4 @@
-"""The app end to end, over HTTP, with a scripted model (CLAIMS_FNOL_ENV=test).
+"""The app end to end, over HTTP, with a scripted model (`config/test.yaml`).
 
 Tier 2's done-when, without a network or a key: a signed-in policyholder reports
 a collision and gets a claim reference from the claims system; a payout above
@@ -18,12 +18,13 @@ from typing import Any
 import httpx2
 import psycopg
 import pytest
-from agent_harness.llm import ScriptedClient
+from agent_harness import adapters
+from agent_harness.identity.local import LocalIssuer
 from pg import throwaway
 
 from claims_fnol.contracts import ModelResponse, ToolCall, Usage
 from claims_fnol_app import signin
-from claims_fnol_app.compose import AZURE, Wiring, compose
+from claims_fnol_app.compose import compose, hooks, overlay
 from claims_system import server as srv
 from claims_system import store as st
 from claims_system.__main__ import world_records
@@ -43,10 +44,10 @@ def says(text: str = "", *calls: tuple[str, dict[str, object]]) -> ModelResponse
 class App:
     http: httpx2.AsyncClient
     claims_url: str
-    issuer: signin.LocalIssuer
+    issuer: LocalIssuer
 
     def token(self, login: str) -> str:
-        return self.issuer.mint({u.login: u for u in signin.USERS}[login])
+        return signin.mint(self.issuer, {u.login: u for u in signin.USERS}[login])
 
     async def say(self, login: str, text: str, conversation: str | None = None) -> Any:
         sent = {"text": text, "conversation_id": conversation}
@@ -76,13 +77,14 @@ async def app(script: Iterable[ModelResponse]) -> AsyncIterator[App]:
         await st.seed(claims_url, world_records())
         async with st.Store.open(claims_url) as store:
             server = srv.build(store, approvals=srv.dbos_approvals(agent_url))
-            wiring = Wiring(
-                env="test", agent_database_url=agent_url, claims=server, llm=ScriptedClient(script)
-            )
-            async with compose(wiring) as built:
-                transport = httpx2.ASGITransport(app=built)
-                async with httpx2.AsyncClient(transport=transport, base_url="http://app") as http:
-                    yield App(http, claims_url, built.state.local_issuer)
+            given = hooks(script=script, claims_server=server)
+            with pytest.MonkeyPatch.context() as env:
+                env.setenv("CLAIMS_DBOS_DATABASE_URL", agent_url)
+                planned = adapters.plan(overlay("test"))
+                async with compose(planned, given=given) as built:
+                    transport = httpx2.ASGITransport(app=built)
+                    async with httpx2.AsyncClient(transport=transport, base_url="http://app") as h:
+                        yield App(h, claims_url, built.state.local_issuer)
 
 
 async def test_a_reported_collision_gets_a_reference_from_the_claims_system() -> None:
@@ -183,13 +185,6 @@ async def test_local_sign_in_sends_each_test_user_to_their_page(
         assert went.status_code == 400
     else:
         assert went.status_code == 303 and went.headers["location"].startswith(lands)
-
-
-async def test_the_azure_row_names_its_adapters_and_does_not_start() -> None:
-    with pytest.raises(NotImplementedError, match="Entra"):
-        async with compose(Wiring(env="azure", agent_database_url="", claims=None)):
-            pass
-    assert "APIM" in AZURE and "App Insights" in AZURE
 
 
 # What gpt-oss-120b actually wrote in the first live run (FINDINGS F-17, F-18,

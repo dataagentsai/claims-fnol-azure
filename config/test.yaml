@@ -1,0 +1,37 @@
+# The app's own tests (tests/test_app.py): everything real except the model.
+#
+# The claims system's MCP server runs in the test's process and is handed in as
+# the tool runtime's `server` hook; the agent's database is a throwaway one the
+# test names in CLAIMS_DBOS_DATABASE_URL. No .env is read.
+apiVersion: harness-overlay/v1
+environment: test
+profile: ../harness-profile.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: a test reads only its own process environment
+  telemetry:
+    adapter: console
+    why: spans stay in memory, where a test can read them
+  model:
+    adapter: scripted
+    why: the app's tests script the model — no network, no key, no cost
+  state:
+    adapter: postgres
+    why: a throwaway database on the local PostgreSQL service
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
+  identity:
+    adapter: local-dev
+    why: test users signed in the test's process
+    url: http://local-issuer.test/realms/claims
+    audience: claims-fnol
+  tool_runtime:
+    adapter: mcp-client
+  approval:
+    adapter: dbos-workflows
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
+    name: claims-fnol
+
+app:
+  usage_route: true

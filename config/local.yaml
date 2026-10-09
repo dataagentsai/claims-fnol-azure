@@ -1,0 +1,41 @@
+# This Mac (`scripts/dev-up.sh`): which adapter fills each port here.
+#
+# Read by claims_fnol_app.compose through agent_harness.adapters. CLAIMS_FNOL_ENV
+# names this file and nothing else. Every adapter that differs from the profile
+# (harness-profile.yaml, extending stacks/azure.yaml) says why; secrets are named
+# by reference, never written here.
+apiVersion: harness-overlay/v1
+environment: local
+profile: ../harness-profile.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: no Key Vault on a Mac — the environment first, then .env (gitignored)
+    dotenv: ../.env
+  telemetry:
+    adapter: console
+    why: traces stay in this process; Application Insights arrives in Tier 4
+  model:
+    adapter: groq-direct
+    why: Groq straight from this Mac on its free tier; APIM in front of it is Tier 3
+    api_key: {env: GROQ_API_KEY}
+  state:
+    adapter: postgres
+    why: the local PostgreSQL service; Azure's flexible server is Tier 3
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
+  identity:
+    adapter: local-dev
+    why: test users signed on this Mac (/signin); Entra ID is Tier 4
+    url: http://local-issuer.test/realms/claims
+    audience: claims-fnol
+  tool_runtime:
+    adapter: mcp-client
+    url: {env: CLAIMS_MCP_URL, default: "http://127.0.0.1:9050/mcp"}
+  approval:
+    adapter: dbos-workflows
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
+    name: claims-fnol
+
+app:
+  usage_route: true   # GET /dev/usage: model calls and tokens, for the smoke check
