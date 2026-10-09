@@ -1,0 +1,123 @@
+<!--
+  APIM's "groq" API policy: rate limit, token metrics, Content Safety on the
+  prompt and the completion, then Groq with the key from Key Vault. Why these
+  policies and not llm-token-limit / llm-content-safety, with sources: the
+  header of infra/modules/apim.bicep (FINDINGS F-39, F-40).
+-->
+<policies>
+  <inbound>
+    <base />
+    <!-- Request rate per subscription key (the agent's): 30 calls a minute. -->
+    <rate-limit calls="30" renewal-period="60" remaining-calls-header-name="x-ratelimit-remaining" />
+    <!-- Token counts per call into Application Insights (customMetrics). -->
+    <llm-emit-token-metric namespace="claims-fnol">
+      <dimension name="API ID" />
+      <dimension name="Subscription ID" />
+    </llm-emit-token-metric>
+    <!-- The newest user message: the text Content Safety screens. -->
+    <set-variable name="prompt" value="@{
+        var body = context.Request.Body.As<JObject>(preserveContent: true);
+        var messages = body["messages"] as JArray;
+        if (messages == null) { return ""; }
+        for (int i = messages.Count - 1; i >= 0; i--) {
+            if ((string)messages[i]["role"] == "user") {
+                var content = messages[i]["content"];
+                var text = content.Type == JTokenType.String ? (string)content : content.ToString();
+                return text.Length > 9000 ? text.Substring(text.Length - 9000) : text;
+            }
+        }
+        return "";
+    }" />
+    <choose>
+      <when condition="@(((string)context.Variables["prompt"]).Length > 0)">
+        <send-request mode="new" response-variable-name="shield" timeout="10" ignore-error="true">
+          <set-url>{{content-safety-endpoint}}contentsafety/text:shieldPrompt?api-version=2024-09-01</set-url>
+          <set-method>POST</set-method>
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-body>@(new JObject(new JProperty("userPrompt", (string)context.Variables["prompt"]), new JProperty("documents", new JArray())).ToString())</set-body>
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{apim-identity-client-id}}" />
+        </send-request>
+        <send-request mode="new" response-variable-name="promptHarm" timeout="10" ignore-error="true">
+          <set-url>{{content-safety-endpoint}}contentsafety/text:analyze?api-version=2024-09-01</set-url>
+          <set-method>POST</set-method>
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-body>@(new JObject(new JProperty("text", (string)context.Variables["prompt"]), new JProperty("outputType", "FourSeverityLevels")).ToString())</set-body>
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{apim-identity-client-id}}" />
+        </send-request>
+        <set-variable name="promptVerdict" value="@{
+            var shield = context.Variables.GetValueOrDefault<IResponse>("shield");
+            var harm = context.Variables.GetValueOrDefault<IResponse>("promptHarm");
+            if (shield == null || harm == null || shield.StatusCode != 200 || harm.StatusCode != 200) { return "unavailable"; }
+            var attack = shield.Body.As<JObject>(preserveContent: true)["userPromptAnalysis"]?["attackDetected"];
+            if (attack != null && (bool)attack) { return "block:prompt-attack"; }
+            foreach (var c in (JArray)harm.Body.As<JObject>(preserveContent: true)["categoriesAnalysis"]) {
+                if ((int)c["severity"] >= {{content-safety-threshold}}) { return "block:" + (string)c["category"]; }
+            }
+            return "pass";
+        }" />
+        <choose>
+          <when condition="@(((string)context.Variables["promptVerdict"]).StartsWith("block"))">
+            <return-response>
+              <set-status code="403" reason="Blocked by Content Safety" />
+              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["promptVerdict"])</value></set-header>
+              <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+              <set-body>{"error":{"code":"content_safety","message":"the prompt was blocked by Content Safety"}}</set-body>
+            </return-response>
+          </when>
+        </choose>
+      </when>
+    </choose>
+    <!-- To Groq, with the key from Key Vault; the agent's subscription key stays here. -->
+    <set-backend-service backend-id="groq" />
+    <set-header name="Authorization" exists-action="override"><value>Bearer {{groq-api-key}}</value></set-header>
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+    <set-variable name="completion" value="@{
+        if (context.Response.StatusCode != 200) { return ""; }
+        var body = context.Response.Body.As<JObject>(preserveContent: true);
+        var text = (string)body["choices"]?[0]?["message"]?["content"] ?? "";
+        return text.Length > 9000 ? text.Substring(0, 9000) : text;
+    }" />
+    <choose>
+      <when condition="@(((string)context.Variables["completion"]).Length > 0)">
+        <send-request mode="new" response-variable-name="completionHarm" timeout="10" ignore-error="true">
+          <set-url>{{content-safety-endpoint}}contentsafety/text:analyze?api-version=2024-09-01</set-url>
+          <set-method>POST</set-method>
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-body>@(new JObject(new JProperty("text", (string)context.Variables["completion"]), new JProperty("outputType", "FourSeverityLevels")).ToString())</set-body>
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{apim-identity-client-id}}" />
+        </send-request>
+        <set-variable name="completionVerdict" value="@{
+            var harm = context.Variables.GetValueOrDefault<IResponse>("completionHarm");
+            if (harm == null || harm.StatusCode != 200) { return "unavailable"; }
+            foreach (var c in (JArray)harm.Body.As<JObject>(preserveContent: true)["categoriesAnalysis"]) {
+                if ((int)c["severity"] >= {{content-safety-threshold}}) { return "block:" + (string)c["category"]; }
+            }
+            return "pass";
+        }" />
+        <choose>
+          <when condition="@(((string)context.Variables["completionVerdict"]).StartsWith("block"))">
+            <return-response>
+              <set-status code="403" reason="Blocked by Content Safety" />
+              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["completionVerdict"])</value></set-header>
+              <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+              <set-body>{"error":{"code":"content_safety","message":"the completion was blocked by Content Safety"}}</set-body>
+            </return-response>
+          </when>
+        </choose>
+      </when>
+    </choose>
+    <!-- Both verdicts on the response, for the trace and the guardrail_log plug-in. -->
+    <set-header name="x-content-safety" exists-action="override">
+      <value>@("prompt=" + context.Variables.GetValueOrDefault<string>("promptVerdict", "skipped") + "; completion=" + context.Variables.GetValueOrDefault<string>("completionVerdict", "skipped"))</value>
+    </set-header>
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

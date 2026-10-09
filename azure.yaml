@@ -1,0 +1,43 @@
+# The Azure Developer CLI (azd) project: `azd up` provisions infra/main.bicep
+# and deploys the two services; `azd down --purge` removes everything.
+# README, "Deploy to Azure".
+#
+# Images come from GitHub Container Registry (public), not Azure Container
+# Registry: a containerapp service with `image` and no `project` is deployed
+# from that image as it is, with no registry of ours ("If we don't have a
+# registry specified and the service does not reference a project path then we
+# are referencing a public/pre-existing image and don't have anything to tag or
+# push": azd's cli/azd/pkg/project/container_helper.go, read 9 Oct 2026;
+# learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema, "Container
+# Apps from a prebuilt image", updated 26 Aug 2026). Until Tier 4 pushes them,
+# the preprovision hook sets both to a public placeholder.
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: claims-fnol-azure
+metadata:
+  template: claims-fnol-azure@0.1.0
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  agent:
+    host: containerapp
+    image: ${AGENT_IMAGE}
+  claims-system:
+    host: containerapp
+    image: ${CLAIMS_SYSTEM_IMAGE}
+
+hooks:
+  preprovision:
+    shell: sh
+    run: ./infra/hooks/preprovision.sh
+    interactive: true
+    continueOnError: false
+  postprovision:
+    shell: sh
+    run: ./infra/hooks/postprovision.sh
+    interactive: true
+    continueOnError: false

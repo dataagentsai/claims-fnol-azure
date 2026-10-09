@@ -1,0 +1,18 @@
+# The image takes pyproject.toml, uv.lock, harness-profile.yaml, config/ and
+# src/ only. Never the local secrets or state.
+.env
+.env.*
+.venv/
+.state/
+.azure/
+.git/
+reports/
+**/__pycache__/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+tests/
+evals/
+docs/
+infra/
+scripts/

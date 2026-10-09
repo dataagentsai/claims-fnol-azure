@@ -33,6 +33,9 @@ Tier 2b — adapters from configuration, checks as plug-ins:
 - `src/claims_fnol/policy/evaluators.yaml` — where each reply check runs (reply,
   online, release), read through `agent_harness.evals`; moving one is a YAML edit.
 
+Tier 3 — the Azure infrastructure as Bicep + azd, written and checked offline
+(not yet deployed): see "Deploy to Azure".
+
 ## Run it on your Mac
 
 Needs: the Homebrew PostgreSQL service running (`brew services list` shows
@@ -71,3 +74,107 @@ chat, or **Asha Rao** (claims handler) for the desk. Then, as Rohan:
 The live check of those four, with the real model: `.venv/bin/python scripts/smoke.py`
 after `scripts/dev-up.sh --fresh`. Its last results are under "Smoke check" in
 FINDINGS.md.
+
+## Deploy to Azure
+
+Tier 3: `infra/` (Bicep, one module per resource, each starting with what it is,
+why it is here and what it costs), `azure.yaml` (the azd project),
+`infra/hooks/` and the two Dockerfiles. **Written and checked offline only**
+(`tests/test_infra.py`): `az`, `azd` and `bicep` are not installed on this Mac,
+so nothing has been compiled or deployed yet.
+
+### What it creates
+
+In one resource group, `rg-claims-fnol-dev`, Central India (Content Safety in
+South India, the only Indian region that has it):
+
+| Resource | Tier | What it is for |
+|---|---|---|
+| Budget | $10/month | Alerts at 50% and 80% spent and at a 100% forecast; created first |
+| Log Analytics + Application Insights | PerGB2018, 30 days, 0.1 GB/day cap | Traces of every conversation, APIM's token metrics |
+| Container Apps environment + 2 apps | Consumption, min 0 / max 1 replicas | `agent` (public HTTPS), `claims-system` (internal only) |
+| 3 user-assigned managed identities | — | One per app and one for APIM; secrets read through them |
+| PostgreSQL flexible server | Burstable B1ms, 32 GB, no HA, 7-day backups | `claims_fnol` and `claims_fnol_dbos`; `vector` allowed |
+| Key Vault | Standard, RBAC, soft delete, no purge protection | Every secret; the overlay names them, never holds them |
+| API Management | Consumption | The model gateway: rate limit, token metrics, Content Safety, Groq |
+| Content Safety | F0 (free) | Screens each prompt and completion at APIM |
+| App Configuration | Free | `payout_limit_inr`, `online_sample_rate` (read by nothing yet, F-35) |
+| Entra app registration | — | Made by a hook: `api://claims-fnol`, role `desk.handler` |
+
+Images come from GitHub Container Registry as public images, so there is no
+Azure Container Registry: azd deploys a `containerapp` service that names an
+`image` and no `project` from that image as it is. Until Tier 4 pushes them, the
+apps run a public placeholder image.
+
+### Prerequisites
+
+- An Azure subscription where you are Owner and can create app registrations.
+- `az` (Azure CLI) and `azd` (Azure Developer CLI); Bicep comes with `az`.
+- A Groq API key, typed once when the hook asks; it goes straight to Key Vault.
+
+### Steps
+
+    az login                      # the hooks use az (Key Vault, Entra)
+    azd auth login                # azd's own sign-in, same tenant
+    azd env new dev               # once
+    azd env set AZURE_LOCATION centralindia
+    azd up                        # provision, then deploy
+
+`azd up` asks:
+
+1. **Before provisioning** (`infra/hooks/preprovision.sh`): the email for the
+   budget alerts, and optionally your public IP so `psql` from the Mac can reach
+   PostgreSQL. Asked once; kept in `.azure/dev/.env` (gitignored).
+2. **After provisioning** (`infra/hooks/postprovision.sh`): your Groq API key.
+   It is read without being shown and passed to `az keyvault secret set` on its
+   standard input: it is never in a file, a parameter or the shell history.
+   Asked only while the vault holds the placeholder. Then the Entra app
+   registration is created or brought up to date, and you are given the
+   `desk.handler` role.
+
+Once Tier 4 has pushed the images:
+
+    azd env set AGENT_IMAGE ghcr.io/<owner>/claims-fnol-agent:<tag>
+    azd env set CLAIMS_SYSTEM_IMAGE ghcr.io/<owner>/claims-fnol-claims-system:<tag>
+    azd deploy
+
+The images are built with the sibling checkouts named as build contexts (the
+command is at the top of each Dockerfile; FINDINGS F-44).
+
+### What it costs
+
+Running means PostgreSQL started; stopped means stopped. Everything else costs
+nothing at dev traffic either way.
+
+| Resource | Price | Running | Stopped | Source |
+|---|---|---|---|---|
+| PostgreSQL B1ms compute | $0.0245/hour | $0.59/day | $0 | Retail Prices API, Central India, meter "B1MS" |
+| PostgreSQL storage, 32 GB | $0.131/GB-month | $0.14/day | $0.14/day | Retail Prices API, "Storage Data Stored" |
+| PostgreSQL backups, 7 days | $0.095/GB-month beyond the free amount | ~$0 | ~$0 | Retail Prices API, "Backup Storage LRS"; free amount equal to provisioned storage: estimate, verify |
+| Container Apps | first 180,000 vCPU-s, 360,000 GiB-s, 2M requests a month free; then $0.000024/vCPU-s, $0.000003/GiB-s, $0.40/M requests | $0 | $0 | azure.microsoft.com/pricing/details/container-apps (grant); Retail Prices API (rates) |
+| API Management, Consumption | first 1M calls a month free, then $0.035/10K | $0 | $0 | Retail Prices API, "Consumption Calls" |
+| Log Analytics / App Insights | first 5 GB a month free, then $3.22/GB; 0.1 GB/day cap | $0 | $0 | Retail Prices API, "Analytics Logs Data Ingestion"; free 5 GB per billing account: estimate, verify |
+| Key Vault, Standard | $0.03/10K operations | ~$0 | ~$0 | Retail Prices API, "Standard Operations" |
+| App Configuration, Free | $0 | $0 | $0 | Retail Prices API, "Free Instance" |
+| Content Safety, F0 | 5,000 text records a month free | $0 | $0 | azure.microsoft.com/pricing/details/cognitive-services/content-safety |
+| Budget, identities, Entra app | free | $0 | $0 | — |
+| **Total** | | **~$0.73/day** | **~$0.14/day** | |
+
+Retail Prices API: `https://prices.azure.com/api/retail/prices`, filtered by
+service and `armRegionName eq 'centralindia'`, read 9 Oct 2026, USD. Left running
+for a whole month PostgreSQL alone is about $22, more than twice the budget
+(F-47), so stop it when you are done:
+
+    az postgres flexible-server stop  -g rg-claims-fnol-dev -n "$(azd env get-value AZURE_POSTGRES_SERVER)"
+    az postgres flexible-server start -g rg-claims-fnol-dev -n "$(azd env get-value AZURE_POSTGRES_SERVER)"
+
+Azure starts a stopped server again by itself after 7 days.
+
+### Remove it
+
+    azd down --purge
+
+deletes the resource group and purges what Azure would otherwise keep
+soft-deleted (Key Vault, API Management, Content Safety), so the names can be
+used again at once. The Entra app registration is not in the resource group:
+`az ad app delete --id "$(azd env get-value ENTRA_APP_ID)"`.

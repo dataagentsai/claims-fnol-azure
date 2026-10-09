@@ -1,8 +1,14 @@
 # Azure (Tier 4): the profile's adapters, every one — nothing here leaves the
 # stack, so nothing says `why`. It resolves today and runs once Tier 3 has made
-# the resources these names point at (Key Vault, APIM, Application Insights,
-# PostgreSQL flexible server, the Entra app registration). Until then a start
-# fails at the first adapter that reaches its resource, never at a missing name.
+# the resources these names point at (infra/main.bicep: Key Vault, APIM,
+# Application Insights, PostgreSQL flexible server; infra/hooks/entra-app.sh:
+# the Entra app registration). Until then a start fails at the first adapter
+# that reaches its resource, never at a missing name.
+#
+# Nothing here names a deployed resource. Each {env: NAME} is an output of
+# infra/main.bicep, set under the same name in the agent container's
+# environment (and by azd in .azure/<env>/.env); each {key_vault: name} is a
+# secret a module writes. tests/test_infra.py holds both lists to the infra.
 apiVersion: harness-overlay/v1
 environment: azure
 profile: ../harness-profile.yaml
@@ -10,13 +16,13 @@ profile: ../harness-profile.yaml
 bindings:
   secrets:
     adapter: key-vault
-    vault_url: https://kv-claims-fnol.vault.azure.net
+    vault_url: {env: AZURE_KEY_VAULT_ENDPOINT}
   telemetry:
     adapter: azure-monitor-otel
     connection_string: {key_vault: appinsights-connection-string}
   model:
     adapter: apim-ai-gateway
-    base_url: https://apim-claims-fnol.azure-api.net/groq/openai/v1
+    base_url: {env: APIM_GROQ_BASE_URL}
     api_key: {key_vault: apim-subscription-key}
   state:
     adapter: azure-postgresql-flexible

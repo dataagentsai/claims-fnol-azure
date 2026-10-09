@@ -1,0 +1,233 @@
+"""Tier 3 — the Azure infrastructure, checked with no Azure tools and no network.
+
+`az`, `azd` and `bicep` are not installed on this Mac, so nothing here compiles
+Bicep or talks to Azure. What can be checked by reading is checked:
+
+1. azure.yaml: two containerapp services deployed from an image (no build, no
+   registry of ours), the Bicep entry point and the hooks it names exist.
+2. main.parameters.json names only parameters main.bicep declares, and every
+   parameter main.bicep needs without a default is given.
+3. Every module main.bicep uses exists, starts with the three plain-English
+   sections, receives only parameters it declares and every one it requires,
+   and every `<module>.outputs.<name>` main.bicep reads is an output of it.
+4. One API version per resource type across all the Bicep.
+5. The overlay (config/azure.yaml) against the infra: each {env: NAME} is a
+   main.bicep output set under the same name in the agent's environment; each
+   {key_vault: name} is a secret some module writes.
+6. APIM's policy: under Consumption's 16 KiB, every {{named value}} created by
+   apim.bicep, every section present.
+7. The Dockerfiles: what they copy exists, the sibling checkouts they name
+   exist where the build command says, the CMD's module exists, and .env is
+   never sent to a build.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+INFRA = ROOT / "infra"
+MAIN = (INFRA / "main.bicep").read_text()
+
+PARAM = re.compile(r"^param\s+(\w+)\s+\w+(\s*=.*)?$", re.M)
+OUTPUT = re.compile(r"^output\s+(\w+)\s+\w+\s*=", re.M)
+MODULE = re.compile(r"^module\s+(\w+)\s+'([^']+)'\s*=\s*\{", re.M)
+OUTPUT_READ = re.compile(r"\b(\w+)\.outputs\.(\w+)")
+API = re.compile(r"'(Microsoft\.[\w./]+)@([\w.-]+)'")
+SECRET_WRITE = re.compile(
+    r"'Microsoft\.KeyVault/vaults/secrets@[\w-]+'\s*=\s*(?:if\s*\([^)]*\)\s*)?\{\s*"
+    r"parent:\s*\w+\s*name:\s*'([^']+)'"
+)
+HEADER = ("// WHAT IT IS", "// WHICH CONCERN IT SERVES", "// EXPECTED DEV COST")
+
+
+def params(bicep: str) -> dict[str, bool]:
+    """Declared parameters -> whether each has a default."""
+    return {m.group(1): bool(m.group(2)) for m in PARAM.finditer(bicep)}
+
+
+def block(text: str, start: int) -> str:
+    """The brace-balanced block opening at or after `start`."""
+    opened = text.index("{", start)
+    depth = 0
+    for i in range(opened, len(text)):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        if depth == 0:
+            return text[opened : i + 1]
+    raise AssertionError("unbalanced braces")
+
+
+def given(module_body: str) -> set[str]:
+    """The parameter names a `module` statement passes."""
+    inner = block(module_body, module_body.index("params:"))[1:-1]
+    depth, names = 0, set()
+    for line in inner.splitlines():
+        if depth == 0 and (m := re.match(r"\s*(\w+):", line)):
+            names.add(m.group(1))
+        depth += line.count("{") + line.count("[") - line.count("}") - line.count("]")
+    return names
+
+
+MODULES = {m.group(1): (m.group(2), block(MAIN, m.start())) for m in MODULE.finditer(MAIN)}
+ALL_BICEP = {p: p.read_text() for p in INFRA.rglob("*.bicep")}
+
+
+# ------------------------------------------------------------------- 1 azure.yaml
+def test_azure_yaml_deploys_two_prebuilt_images_through_the_bicep_and_hooks() -> None:
+    project = yaml.safe_load((ROOT / "azure.yaml").read_text())
+    infra = project["infra"]
+    assert (ROOT / infra["path"] / f"{infra['module']}.bicep").is_file()
+    for service in ("agent", "claims-system"):
+        entry = project["services"][service]
+        assert entry["host"] == "containerapp"
+        assert "project" not in entry, "an image, not a build: no registry of ours (azd schema)"
+        assert re.fullmatch(r"\$\{[A-Z_]+\}", entry["image"])
+        assert f"'{service}'" in MAIN, f"main.bicep deploys no app tagged {service}"
+    for hook in project["hooks"].values():
+        script = ROOT / hook["run"]
+        assert script.is_file() and os.access(script, os.X_OK), script
+
+
+# --------------------------------------------------------------- 2 the parameters
+def test_the_parameters_file_matches_main_bicep() -> None:
+    declared = params(MAIN)
+    supplied = json.loads((INFRA / "main.parameters.json").read_text())["parameters"]
+    assert set(supplied) <= set(declared), set(supplied) - set(declared)
+    needed = {name for name, has_default in declared.items() if not has_default}
+    assert needed <= set(supplied), needed - set(supplied)
+
+
+# ------------------------------------------------------------------- 3 the modules
+@pytest.mark.parametrize("module", sorted(MODULES))
+def test_each_module_exists_is_explained_and_is_wired_to_its_parameters(module: str) -> None:
+    path, body = MODULES[module]
+    source = (INFRA / path).read_text()
+    for section in HEADER:
+        assert section in source.split("targetScope")[0], f"{path} lacks {section!r}"
+    declared = params(source)
+    passed = given(body)
+    assert passed <= set(declared), f"{module} passes unknown {passed - set(declared)}"
+    required = {name for name, has_default in declared.items() if not has_default}
+    assert required <= passed, f"{module} is missing {required - passed}"
+
+
+def test_every_module_file_is_used_and_every_output_read_exists() -> None:
+    used = {(INFRA / path).resolve() for path, _ in MODULES.values()}
+    assert {p.resolve() for p in (INFRA / "modules").glob("*.bicep")} == used
+    outputs = {
+        name: set(OUTPUT.findall((INFRA / path).read_text())) for name, (path, _) in MODULES.items()
+    }
+    for module, output in OUTPUT_READ.findall(MAIN):
+        assert output in outputs[module], f"{module}.outputs.{output} is not an output"
+
+
+# --------------------------------------------------------------- 4 API versions
+def test_one_api_version_per_resource_type() -> None:
+    versions: dict[str, set[str]] = {}
+    for text in ALL_BICEP.values():
+        for kind, version in API.findall(text):
+            versions.setdefault(kind, set()).add(version)
+    mixed = {kind: v for kind, v in versions.items() if len(v) > 1}
+    assert not mixed, mixed
+
+
+# ------------------------------------------------- 5 the overlay against the infra
+def references(node: object, kind: str) -> set[str]:
+    if isinstance(node, dict):
+        if kind in node and len(node) <= 2:
+            return {str(node[kind])}
+        return set().union(*(references(v, kind) for v in node.values()))
+    if isinstance(node, list):
+        return set().union(*(references(v, kind) for v in node))
+    return set()
+
+
+OVERLAY = yaml.safe_load((ROOT / "config" / "azure.yaml").read_text())
+AGENT_ENV = set(re.findall(r"\{ name: '(\w+)', value:", MODULES["agent"][1]))
+MAIN_OUTPUTS = set(OUTPUT.findall(MAIN))
+SECRETS_WRITTEN = set().union(*(set(SECRET_WRITE.findall(t)) for t in ALL_BICEP.values()))
+
+
+@pytest.mark.parametrize("name", sorted(references(OVERLAY, "env")))
+def test_each_environment_name_the_overlay_reads_is_set_by_the_deployment(name: str) -> None:
+    assert name in MAIN_OUTPUTS, f"{name} is not an output of main.bicep (azd's .env)"
+    assert name in AGENT_ENV, f"{name} is not in the agent container's environment"
+
+
+@pytest.mark.parametrize("name", sorted(references(OVERLAY, "key_vault")))
+def test_each_vault_secret_the_overlay_reads_is_written_by_a_module(name: str) -> None:
+    assert name in SECRETS_WRITTEN, f"no module writes {name}"
+
+
+def test_no_secret_value_or_resource_name_is_written_into_the_overlay() -> None:
+    text = (ROOT / "config" / "azure.yaml").read_text()
+    assert ".vault.azure.net" not in text and ".azure-api.net" not in text
+
+
+# ------------------------------------------------------------- 6 APIM's policy
+POLICY = (INFRA / "policies" / "groq-api.xml").read_text()
+APIM = (INFRA / "modules" / "apim.bicep").read_text()
+
+
+def test_the_policy_fits_consumption_and_every_named_value_exists() -> None:
+    assert len(POLICY.encode()) < 16 * 1024, "Consumption: policy document 16 KiB"
+    assert "loadTextContent('../policies/groq-api.xml')" in APIM
+    defined = set(
+        re.findall(r"namedValues@[\w-]+'\s*=\s*\{\s*parent:\s*\w+\s*name:\s*'([^']+)'", APIM)
+    )
+    assert set(re.findall(r"\{\{([\w-]+)\}\}", POLICY)) <= defined
+    for section in ("<inbound>", "<backend>", "<outbound>", "<on-error>"):
+        assert POLICY.count(section) == 1, section
+    for absent in ("llm-token-limit", "rate-limit-by-key", "llm-content-safety"):
+        assert f"<{absent}" not in POLICY, f"{absent} is not available on Consumption"
+
+
+# ------------------------------------------------------------- 7 the Dockerfiles
+# (Dockerfile, the sibling checkouts its build command names, its CMD's module)
+DOCKERFILES: list[tuple[str, dict[str, str], str]] = [
+    (
+        "agent.Dockerfile",
+        {
+            "harness": "../reference-agent/packages/agent-harness",
+            "stacks": "../clean-ai-engineering/stacks",
+        },
+        "claims_fnol_app",
+    ),
+    (
+        "claims-system.Dockerfile",
+        {
+            "harness": "../reference-agent/packages/agent-harness",
+            "worlds": "../clean-ai-engineering/gates/motor-claims-fnol/worlds",
+        },
+        "claims_system",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("dockerfile", "contexts", "module"), DOCKERFILES, ids=[d[0] for d in DOCKERFILES]
+)
+def test_each_dockerfile_copies_what_exists(
+    dockerfile: str, contexts: dict[str, str], module: str
+) -> None:
+    text = (ROOT / dockerfile).read_text()
+    for name, relative in contexts.items():
+        assert f"--build-context {name}={relative}" in text
+        assert f"COPY --from={name} " in text
+        assert (ROOT / relative).is_dir(), relative
+    for line in re.findall(r"^COPY (?!--from)(.+)$", text, re.M):
+        for source in line.split()[:-1]:
+            assert (ROOT / source).exists(), f"{dockerfile} copies missing {source}"
+    assert (ROOT / "src" / module / "__main__.py").is_file()
+    assert re.search(r"^USER \d+$", text, re.M), "runs as a non-root user"
+
+
+def test_no_build_is_sent_the_local_secrets() -> None:
+    ignored = (ROOT / ".dockerignore").read_text().split()
+    assert {".env", ".venv/", ".azure/"} <= set(ignored)
