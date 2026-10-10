@@ -13,6 +13,14 @@ bindings:
     adapter: environment-settings
     why: no Key Vault on a Mac — the environment first, then .env (gitignored)
     dotenv: ../../.env
+  # A6: the automatic payout limit this system enforces, the same key the agent
+  # reads (`payout.automatic_limit_inr`, here PAYOUT_AUTOMATIC_LIMIT_INR in the
+  # same .env), re-read every ttl_s.
+  config:
+    adapter: environment-settings
+    why: no App Configuration on a Mac — the environment first, then .env (gitignored)
+    dotenv: ../../.env
+    ttl_s: 5
   # Tokens the agent app's local issuer mints for this audience on every call
   # (config/local.yaml: identity.far_end_audience), verified with the keys the
   # app publishes. A new key each time the app starts, under a new id, so a

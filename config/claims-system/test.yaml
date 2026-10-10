@@ -10,5 +10,8 @@ bindings:
   secrets:
     adapter: environment-settings
     why: a test reads only its own process environment
+  config:
+    adapter: static
+    why: a test's values are its own; none given, so the AOAS's limit (the default)
   authorise:
     adapter: asserted

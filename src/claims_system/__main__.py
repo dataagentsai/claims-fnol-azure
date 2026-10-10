@@ -8,7 +8,8 @@ agent's URL. The records connection is also opened read-only, a second guard.
 
 How it checks its caller is its own overlay's (A1): `config/claims-system/
 <CLAIMS_SYSTEM_ENV>.yaml`, default `local`, composed through the harness's
-registry like the agent's — the `authorise` port and nothing else.
+registry like the agent's — the `authorise` port, and the `config` port its
+automatic payout limit is read through (A6; `server.AUTOMATIC_LIMIT`).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any
 
 import yaml
 from agent_harness import adapters
+from agent_harness.config.settings import Key, Settings
 from agent_harness.contracts.records import ApprovalRecordReader
 from agent_harness.identity.far_end import Authorise
 from psycopg.conninfo import make_conninfo
@@ -72,6 +74,14 @@ async def authorisation(
 
 
 @asynccontextmanager
+async def settings(planned: adapters.Plan, keys: tuple[Key[Any], ...]) -> AsyncIterator[Settings]:
+    """The `config` port the overlay binds, over this system's declared keys (A6)."""
+    wired = {"config": {"keys": keys}}
+    async with adapters.compose(planned, hooks=wired, ports=("secrets", "config")) as built:
+        yield built["config"]
+
+
+@asynccontextmanager
 async def approval_records(url: str) -> AsyncIterator[ApprovalRecordReader]:
     """The agent's approval records, read through the harness's records port on
     a connection of this system's own that cannot write (A3, A4)."""
@@ -112,13 +122,15 @@ def _serve(port: int, host: str) -> None:
             st.Store.open(url) as store,
             _records(records_url) as approvals,
             authorisation(planned) as authorise,
+            settings(planned, server.KEYS) as limits,
         ):
-            mcp = server.build(store, authorise=authorise, approvals=approvals)
+            mcp = server.build(store, authorise=authorise, approvals=approvals, limits=limits)
             app = mcp.streamable_http_app(host=host)
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
             print(
                 f"  claims system on http://{host}:{port}/mcp, callers checked by "
-                f"{planned.adapter('authorise')} ({planned.environment})"
+                f"{planned.adapter('authorise')} ({planned.environment}); automatic payout "
+                f"limit {limits.get(server.AUTOMATIC_LIMIT)} from {planned.adapter('config')}"
             )
             await uvicorn.Server(config).serve()
 

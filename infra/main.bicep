@@ -272,6 +272,8 @@ module claimsSystem 'modules/containerapp.bicep' = {
       { name: 'CLAIMS_SYSTEM_ENV', value: 'azure' }
       { name: 'AZURE_TENANT_ID', value: tenant().tenantId }
       { name: 'CLAIMS_SYSTEM_APP_ID', value: claimsSystemAppId }
+      // A6: the automatic payout limit, the agent's key and label (one source of truth).
+      { name: 'AZURE_APP_CONFIGURATION_ENDPOINT', value: appConfig.outputs.endpoint }
     ]
     keyVaultSecrets: [
       // Its own login (claims_system, A4) for both: its database, and the

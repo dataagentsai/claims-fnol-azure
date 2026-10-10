@@ -320,5 +320,5 @@ OVERLAYS = [("local", "local-dev"), ("azure", "entra-id"), ("test", "asserted")]
 def test_each_claims_overlay_binds_its_authorise_adapter(name: str, adapter: str) -> None:
     planned = adapters.plan(overlay(name))
     assert planned.environment == name
-    assert set(planned.bound) == {"secrets", "authorise"}
+    assert set(planned.bound) == {"secrets", "config", "authorise"}
     assert planned.adapter("authorise") == adapter

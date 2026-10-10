@@ -597,7 +597,7 @@ async def test_the_surface_is_the_aoas_claims_systems() -> None:
 
 def test_the_far_ends_limit_is_the_aoas() -> None:
     limit = aoas()["operations"]["issue_payout"]["authority"]["agent_when"][0]["at_most"]
-    assert limit == srv.AUTOMATIC_LIMIT
+    assert limit == srv.AUTOMATIC_LIMIT.default == srv.AOAS_LIMIT
 
 
 async def test_migrations_apply_once() -> None:

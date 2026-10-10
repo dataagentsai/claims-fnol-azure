@@ -16,7 +16,13 @@ profile: ../../harness-profile.yaml
 bindings:
   secrets:
     adapter: environment-settings
-    why: nothing this overlay reads is a secret (a tenant and an app id); the database URLs reach the container as Key Vault references (infra)
+    why: nothing this overlay reads is a secret (a tenant, an app id, an endpoint); the database URLs reach the container as Key Vault references (infra)
+  # A6: one source of truth — the agent's key and label, read with this
+  # system's own identity (App Configuration Data Reader), never through the agent.
+  config:
+    adapter: app-configuration
+    endpoint: {env: AZURE_APP_CONFIGURATION_ENDPOINT}
+    label: dev
   authorise:
     adapter: entra-id
     tenant: {env: AZURE_TENANT_ID}

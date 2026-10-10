@@ -37,6 +37,21 @@ policyholder. Above the automatic limit, the decision must be a person's. The
 limit is restated here, not imported — the far end's own statement of the rule
 (AOAS `issue_payout.authority`).
 
+**The limit is read through this system's own config port** (A6), from its own
+overlay (`config/claims-system/<env>.yaml`), once per payout. One source of
+truth: the same App Configuration key and label the agent reads,
+`payout.automatic_limit_inr` under `dev`, read by this system's own identity
+(App Configuration Data Reader, never a writer), never by asking the agent.
+Two keys would need two changes to move one rule, and a gap between them is
+either a payout the agent granted and this check refuses or one this check
+would let through that the agent sent to a person. With one key the two can
+differ only while one side's cache is older than the other's (30 s). This check
+is the money wall either way: the key's default and ceiling are the AOAS's, so
+no value raises this system above the AOAS without a spec change; and wherever
+the agent's limit and this one differ, the lower wins — the agent sends a
+payout above its own limit to a person, and this check refuses an automatic
+grant above its own (`tests/test_payout_limit_live.py`; FINDINGS F-71).
+
 Each tool also declares its `entity`, so the agent's freshness re-read picks the
 right reader without help from its binding (FINDINGS F-11).
 """
@@ -49,6 +64,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
+from agent_harness.config.settings import Key, Settings, between, defaults
 from agent_harness.contracts.records import ApprovalRecord, ApprovalRecordReader, refusals
 from agent_harness.identity.far_end import Authorise, Call, Caller, CallRefused
 from mcp.server.mcpserver import Context, MCPServer
@@ -84,8 +100,14 @@ agent's binding has no read scopes to filter by; every caller it sends holds it.
 WORKFLOW_SCOPE = "payouts:write"
 """What makes a caller with no holder the payout workflow's own login."""
 
-AUTOMATIC_LIMIT = Decimal("25000")
+AOAS_LIMIT = Decimal("25000")
 """AOAS `issue_payout.authority.agent_when`: approved_amount at most ₹25,000."""
+AUTOMATIC_LIMIT = Key(
+    "payout.automatic_limit_inr", Decimal, AOAS_LIMIT, check=between(1, AOAS_LIMIT)
+)
+"""The same key the agent reads (one source of truth); the AOAS's number its
+default and its ceiling."""
+KEYS = (AUTOMATIC_LIMIT,)
 AUTOMATIC_APPROVER = "policy:automatic-limit"
 """Who grants a payout within the limit, as the approval records it."""
 
@@ -169,12 +191,14 @@ def covers(
     claim: Row,
     key: str | None,
     now: float,
+    limit: Decimal = AOAS_LIMIT,
 ) -> str | None:
     """Why this approval record does not cover paying this claim now, or `None`.
 
     The call is rebuilt as this system received it — the claim, the amount this
     system holds for it, the policyholder it verified, the key on the call — and
-    its digest must be the record's (`agent_harness.contracts.records.refusals`)."""
+    its digest must be the record's (`agent_harness.contracts.records.refusals`).
+    `limit` is the automatic limit read for this payout."""
     if approval is None:
         return "issue_payout needs an approval, and none this system can read was named"
     amount = Decimal(str(claim.get("approved_amount", 0)))
@@ -188,8 +212,8 @@ def covers(
     )
     if approval.decided_by in (None, holder):
         failed.append("nobody but the policyholder approved it")
-    if amount > AUTOMATIC_LIMIT and approval.decided_by == AUTOMATIC_APPROVER:
-        failed.append(f"{amount} is above the automatic limit, and no person decided it")
+    if amount > limit and approval.decided_by == AUTOMATIC_APPROVER:
+        failed.append(f"{amount} is above the {limit} automatic limit, and no person decided it")
     if not failed:
         return None
     return f"approval {approval.id} does not cover this payout: {'; '.join(failed)}"
@@ -203,6 +227,7 @@ class _Gate:
     authorise: Authorise
     approvals: ApprovalRecordReader | None
     clock: Callable[[], float]
+    limits: Settings
 
     async def record(self, meta: Mapping[str, object]) -> ApprovalRecord | None:
         named = meta.get(APPROVAL_META)
@@ -230,7 +255,10 @@ class _Gate:
             return  # answered as unknown by the store, never as refused
         meta = _meta(ctx)
         approval = await self.record(meta)
-        why = covers(approval, holder=who, claim=claim, key=_key(meta), now=self.clock())
+        limit = self.limits.get(AUTOMATIC_LIMIT)  # once per payout (A6)
+        why = covers(
+            approval, holder=who, claim=claim, key=_key(meta), now=self.clock(), limit=limit
+        )
         if why is not None:
             raise NotAuthorised(why)
 
@@ -241,10 +269,12 @@ def build(
     authorise: Authorise,
     approvals: ApprovalRecordReader | None = None,
     clock: Callable[[], float] = time.time,
+    limits: Settings | None = None,
 ) -> MCPServer:
-    """The store, as an MCP server that decides for itself whose rows these are."""
+    """The store, as an MCP server that decides for itself whose rows these are.
+    `limits` is this system's config port; without one, the declared defaults."""
     server = MCPServer("claims_system")
-    gate = _Gate(store, authorise, approvals, clock)
+    gate = _Gate(store, authorise, approvals, clock, limits or defaults(*KEYS))
     _reads(server, store, gate.holder)
     _writes(server, store, gate.holder, gate.payable)
     return server
@@ -343,7 +373,9 @@ def _writes(server: MCPServer, store: Store, holder: Holder, payable: Payable) -
 __all__ = [
     "APPROVAL_META",
     "AUTOMATIC_APPROVER",
+    "AOAS_LIMIT",
     "AUTOMATIC_LIMIT",
+    "KEYS",
     "IDEMPOTENCY_META",
     "READ_SCOPE",
     "SCOPES",
