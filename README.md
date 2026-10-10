@@ -95,9 +95,9 @@ FINDINGS.md.
 
 Tier 3: `infra/` (Bicep, one module per resource, each starting with what it is,
 why it is here and what it costs), `azure.yaml` (the azd project),
-`infra/hooks/` and the two Dockerfiles. **Written and checked offline only**
-(`tests/test_infra.py`): `az`, `azd` and `bicep` are not installed on this Mac,
-so nothing has been compiled or deployed yet.
+`infra/hooks/` and the two Dockerfiles. Checked offline (`tests/test_infra.py`);
+CI compiles the Bicep and builds both images on every push (see "CI and
+deploy" below). Nothing has been deployed yet.
 
 ### What it creates
 
@@ -163,14 +163,91 @@ database URL (`claims_agent`), its telemetry, APIM key and Entra secret; the
 claims system its two URLs (`claims_system`). Neither may read the other's
 login or any PostgreSQL password; only APIM reads the vault as a whole.
 
-Once Tier 4 has pushed the images:
+To run the images CI pushed from the Mac (any commit CI passed on main):
 
-    azd env set AGENT_IMAGE ghcr.io/<owner>/claims-fnol-agent:<tag>
-    azd env set CLAIMS_SYSTEM_IMAGE ghcr.io/<owner>/claims-fnol-claims-system:<tag>
+    azd env set AGENT_IMAGE ghcr.io/dataagentsai/claims-fnol-agent:<sha>
+    azd env set CLAIMS_SYSTEM_IMAGE ghcr.io/dataagentsai/claims-fnol-claims-system:<sha>
     azd deploy
 
 The images are built with the sibling checkouts named as build contexts (the
 command is at the top of each Dockerfile; FINDINGS F-44).
+
+### CI and deploy
+
+**On every push and pull request to main**, `.github/workflows/ci.yml`:
+
+1. checks out this repository and its five siblings beside it, as on the Mac
+   (`../reference-agent`, `../agenttwin`, `../clean-ai-engineering`,
+   `../ai-harness-catalog`, `../ai-assurance-catalog`), each at `main`; the
+   run's summary lists the commit of each (pin one by setting its `*_REF` to a SHA);
+2. starts PostgreSQL 16 as a service and sets `CLAIMS_TEST_SERVER_URL` to its
+   superuser, so the role tests run;
+3. ruff, mypy, lint-imports, actionlint;
+4. the full suite (the scripted model; no call reaches Groq), writing the JUnit
+   report the gates read;
+5. the four gates (`clean-ai-engineering/tools/gates.py`); the verdict is the
+   run's `gates-verdict` artifact;
+6. compiles `infra/main.bicep`;
+7. builds both images. Only on a push to main, and only after all of the
+   above passed, they are pushed to GitHub Container Registry as
+   `ghcr.io/dataagentsai/claims-fnol-agent` and
+   `ghcr.io/dataagentsai/claims-fnol-claims-system`, tagged with the commit SHA
+   and `latest`. A pull request builds them and pushes nothing.
+
+New packages on GHCR start private. Once, after the first push to main, make
+both public (the package's settings, "Change visibility"), so Container Apps
+can pull them with no registry credentials.
+
+**Deploy** (`.github/workflows/deploy.yml`) runs `azd provision` then
+`azd deploy` with one commit's images. It signs in to Azure with OIDC: GitHub's
+token for the job is exchanged for an Entra token, so no client secret exists.
+It deploys only a commit whose CI succeeded on a push to main. It stays off
+until it is set up, and says so on the run page.
+
+Set it up once, after the first `azd up` from the Mac (that run asks for the
+Groq key and makes the Entra apps; a runner can do neither):
+
+    az login
+    scripts/ci/setup-federated-credential.sh        # asks before each change; --yes to skip asking
+
+The script is idempotent and makes:
+
+- a deploy identity, `claims-fnol-github`;
+- federated credentials for `main` and for the `dev` environment;
+- the fewest roles that identity needs:
+  - a custom role at subscription scope, for the deployment and its resource group only;
+  - Contributor on `rg-claims-fnol-dev`;
+  - Role Based Access Control Administrator there, limited to the five roles the Bicep assigns;
+  - Key Vault Secrets User on the vault.
+
+It gives the identity no Microsoft Graph permission. It ends by printing what
+to set in GitHub:
+
+- **Repository secrets** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+  `AZURE_SUBSCRIPTION_ID`. These are ids, not passwords; nothing secret is stored.
+- **Repository variables**, from your azd environment: `AZURE_KEY_VAULT_NAME`,
+  `ENTRA_APP_ID`, `CLAIMS_SYSTEM_APP_ID`, `BUDGET_CONTACT_EMAIL` (required),
+  and `AZURE_ENV_NAME`, `AZURE_LOCATION`, `OWNER_IP_ADDRESS` (optional).
+- **An environment** named `dev`.
+
+Then deploy:
+
+    gh workflow run deploy.yml                       # the head of main
+    gh workflow run deploy.yml -f sha=<full sha>     # a given commit CI passed
+
+To deploy after every green CI on main, set the repository variable
+`DEPLOY_AFTER_CI` to `true`.
+
+The runner skips the hooks that ask questions or need Graph, and runs the rest
+itself:
+
+- `preprovision.sh` runs unchanged.
+- It checks that the Groq key and the Entra client secret are real in the
+  vault. Otherwise provision would write placeholders over them.
+- `entra-app.sh` is not run. App registrations change from the Mac
+  (`azd hooks run postprovision`).
+- `db-roles.sh` runs unchanged. A firewall rule admits the runner's IP for
+  that one step and is removed afterwards, even when the step fails.
 
 ### What it costs
 
