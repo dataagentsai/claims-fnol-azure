@@ -192,7 +192,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t4a">
-  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill doing">In progress · A1, A3–A8 done</span></div>
+  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill doing">In progress · A1, A3–A9, A11–A13 done; A2 and A10 open</span></div>
   <p class="muted">The 10 Oct audit of every page against the code (<code>docs/DESIGN-AUDIT.md</code>, group A). These are where the design is right and the code isn't there yet, on the paths that move money or identify people.</p>
   <ul class="tasks">
     <li><b>A1</b>✅  The claims system verifies the caller's token on every call: an on-behalf-of exchange in the agent, and token checks at the claims server (today it trusts what the agent asserts; F-23)</li>
@@ -203,8 +203,8 @@ ul.tasks li{margin:3px 0}
     <li><b>A6</b>✅  A config port with an App Configuration adapter; the ₹25,000 limit read from it by the agent <i>and</i> the claims system (F-35)</li>
     <li><b>A7</b>✅  Container Apps revisions in Multiple mode, for the canary exercise</li>
     <li><b>A8</b>✅  The model allow-list in the APIM policy</li>
-    <li><b>A9</b> The <code>guardrail_log</code> evaluator: Content Safety's verdicts recorded as check results</li>
-    <li><b>A11–A13</b> Security basics: a pre-model injection rule and a post-tool hidden-instruction rule (both positions are empty today); Aadhaar and PAN in redaction and <code>no_pii_echo</code>; a kill switch per agent</li>
+    <li><b>A9</b>✅  The <code>guardrail_log</code> evaluator: Content Safety's verdicts recorded as check results</li>
+    <li><b>A11–A13</b>✅  Security basics: a pre-model injection rule and a post-tool hidden-instruction rule (both positions are empty today); Aadhaar and PAN in redaction and <code>no_pii_echo</code>; a kill switch per agent</li>
     <li><b>A10</b> (already Tier 4) the gates in GitHub Actions before every deploy</li>
   </ul>
   <div class="dw"><b>Done when:</b> each item has a table-driven test, and both agents still pass all four gates; a forged session is refused by the claims server.</div>
@@ -357,6 +357,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>11 Oct 2026</td><td>Tier 4a: <b>A9, A11, A12, A13</b> done. A9: APIM writes Content Safety's verdict on every response (<code>x-content-safety</code>), both model clients carry it on the response and the span, and <code>guardrail_log</code> records it at <code>online</code>. A11: the library's <code>no_known_injection</code> (pre-model, safe reply) and <code>no_instructions_in_result</code> (post-tool: the result stays data, later writes in the run wait for the policyholder); the clothing agent places both too. A12: Aadhaar (Verhoeff check digit) and PAN masked and never read back; an agent registers its own patterns (F-10 fixed). A13: <code>agent.enabled</code>, read before every turn; false is the paused reply with no model call, the desk untouched. Checked on the Mac: a claim-status chat answered, an injection message refused, no model call. 655 tests here, 2031 in the reference agent; all four gates for both. Findings F-79 to F-90.</td></tr>
 <tr><td>10 Oct 2026</td><td>Tier 4a: <b>A6</b> done: a config port (environment, static, App Configuration over REST with the managed identity); the ₹25,000 limit is one App Configuration key read by both the agent and the claims system, refreshed every 30 s, never above the spec's value, the stricter side winning. Checked live on the Mac: lowering the limit made a ₹25,000 payout wait, without a restart. 616 tests, all four gates. Findings F-71 to F-78.</td></tr>
 <tr><td>10 Oct 2026</td><td>Tier 4a: <b>A4</b> (a database login per app: the claims system may only read approvals in the agent database; no app uses the admin login; per-secret Key Vault access), <b>A7</b> (the agent app can split traffic between revisions), <b>A8</b> (APIM refuses any model not on the allow-list, before any paid call) done. 589 tests, all four gates. Findings F-61 to F-70.</td></tr>
 <tr><td>10 Oct 2026</td><td>Tier 4a: <b>A5</b> (a redelivered message runs as the same run, so a crash never repeats a side effect), <b>A3</b> (our own approvals and escalations records behind an interface; the claims system reads them read-only and checks a digest of the exact payout; no DBOS internals), <b>A1</b> (the claims system verifies the caller's token: local-dev on the Mac, Entra in Azure; "trust the agent" refused outside tests; the payout workflow has its own login) done. Both agents pass all four gates (1,889 and 520 tests). Findings F-48 to F-60.</td></tr>
