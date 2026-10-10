@@ -286,19 +286,25 @@ def test_a_rule_that_fails_blocks_closed() -> None:
     assert verdict.blocked and "blocked" in verdict.reason
 
 
-# [position, the rules it runs, in order]
+def names(rules: tuple[object, ...]) -> list[str]:
+    return [getattr(r, "__name__", "") for r in rules]
+
+
+# [position, the rules it runs, by name, in order]
 ORDER = [
-    (Position.POST_MODEL, OUTPUT_RULES),
-    (Position.REPLY, REPLY_RULES),
-    (Position.PRE_TOOL, (policyholder_asked,)),
+    (Position.PRE_MODEL, ["no_known_injection"]),  # A11
+    (Position.POST_MODEL, names(OUTPUT_RULES)),
+    (Position.REPLY, names(REPLY_RULES)),
+    (Position.PRE_TOOL, ["policyholder_asked", "no_instructions_in_result.hold_writes"]),
+    (Position.POST_TOOL, ["no_instructions_in_result"]),  # A11
 ]
 
 
 @pytest.mark.discharges("AHC-0093", "AHC-0094")
 @pytest.mark.parametrize(("position", "rules"), ORDER, ids=[o[0].value for o in ORDER])
 def test_each_position_runs_its_rules_in_a_declared_order(
-    position: Position, rules: tuple[object, ...]
+    position: Position, rules: list[str]
 ) -> None:
-    assert DEFAULT_RULES[position] == rules
+    assert names(DEFAULT_RULES[position]) == rules
     first_blocks = (lambda _c: block("first", "first"), lambda _c: block("second", "second"))
     assert enforce(said("x"), rules=first_blocks).rule == "first"

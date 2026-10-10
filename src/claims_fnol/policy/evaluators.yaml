@@ -22,8 +22,23 @@ evaluators:
   # header), recorded as a check result. It judges nothing again and never
   # blocks: APIM already blocked. Skips locally, where there is no APIM.
   content_safety: {kind: guardrail_log, source: x-content-safety}
+  # A11, the library's (agent_harness.evals.injection): known injection phrasing
+  # in the policyholder's words, and instructions inside a tool's result.
+  no_known_injection: {kind: rule}
+  no_instructions_in_result: {kind: rule}
 
 positions:
+  # Inline, before the model is paid for: a fail ends the turn with the safe
+  # reply, the refusal the loop already gives at PRE_MODEL (A11).
+  pre_model:
+    - {use: no_known_injection, on_fail: safe_reply}
+
+  # Inline, on each tool result before it enters context: the result still goes
+  # in, fenced as data like every result; any write later in the same run is
+  # refused until the policyholder confirms it in a message of their own (A11).
+  post_tool:
+    - {use: no_instructions_in_result, on_fail: hold_writes}
+
   # Inline, before the policyholder reads it: a fail is the safe reply. Each runs
   # on the model's reply; those that need nothing but the reply also run on every
   # route's (a template's), where there are no tool results to ground against.
@@ -43,6 +58,8 @@ positions:
       - {use: no_ungrounded_entity, on_fail: alert}
       - {use: money_in_rupees, on_fail: alert}
       - {use: content_safety, on_fail: alert}   # A9: online only, never at reply (F-79)
+      - {use: no_known_injection, on_fail: alert}
+      - {use: no_instructions_in_result, on_fail: alert}
 
   # Over golden cases and scenarios: a pass rate under `min` blocks the release.
   release:
