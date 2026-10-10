@@ -207,8 +207,10 @@ module claimsSystem 'modules/containerapp.bicep' = {
     keyVaultUri: keyVault.outputs.uri
     keyVaultSecrets: [
       { name: 'claims-database-url', secret: 'claims-database-url', variable: 'CLAIMS_DATABASE_URL' }
-      // The claims system checks a payout against the approval wait (F-23).
-      { name: 'agent-database-url', secret: 'agent-database-url', variable: 'CLAIMS_DBOS_DATABASE_URL' }
+      // The claims system checks a payout against the agent's own approval
+      // records (F-23, A3), on a read-only connection. A4 gives it a role that
+      // can only read agent_state.approvals; until then, the agent's URL.
+      { name: 'agent-database-url', secret: 'agent-database-url', variable: 'CLAIMS_RECORDS_DATABASE_URL' }
     ]
   }
   dependsOn: [postgres]

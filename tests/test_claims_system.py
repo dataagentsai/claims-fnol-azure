@@ -16,33 +16,36 @@ import psycopg
 import pytest
 import yaml
 from agent_harness.contracts import Approval, ApprovalState
+from agent_harness.contracts.records import ApprovalRecord, approval_record
+from agent_harness.state.postgres import pool
+from agent_harness.state.records import InMemoryRecords, PostgresRecords
 from kit import AOAS, MEERA, ROHAN
 from mcp.client import Client
 from pg import throwaway
 
 from claims_fnol.binding import SCOPES as AGENT_SCOPES
+from claims_fnol_app.compose import migrate_agent_state
 from claims_system import server as srv
 from claims_system import store as st
-from claims_system.__main__ import world_records
+from claims_system.__main__ import approval_records, world_records
 
 NOBODY = None
 
 
 @asynccontextmanager
 async def claims(
-    approvals: Mapping[str, Approval] | None = None, *, now: float | None = None
+    approvals: Mapping[str, ApprovalRecord] | None = None, *, now: float | None = None
 ) -> AsyncIterator[tuple[Client, str]]:
-    """The claims system on a fresh database: an MCP client, and the database URL."""
+    """The claims system on a fresh database: an MCP client, and the database URL.
+    `approvals` are the agent's records it reads through the records port (A3)."""
     async with throwaway() as url:
         await st.migrate(url)
         await st.seed(url, world_records())
-        held = dict(approvals or {})
-
-        async def load(approval_id: str) -> Approval | None:
-            return held.get(approval_id)
-
+        held = InMemoryRecords()
+        for record in (approvals or {}).values():
+            await held.put_approval(record)
         async with st.Store.open(url) as store:
-            server = srv.build(store, approvals=load, clock=lambda: now or time.time())
+            server = srv.build(store, approvals=held, clock=lambda: now or time.time())
             async with Client(server) as client:
                 yield client, url
 
@@ -323,7 +326,8 @@ NOW = 1_800_000_000
 KEY = "run-1:3:0"
 
 
-def approval(claim: str, amount: int, **changed: Any) -> Approval:
+def approval(claim: str, amount: int, **changed: Any) -> ApprovalRecord:
+    """The agent's record of a grant to pay `claim` `amount`, as the wait writes it."""
     base: dict[str, Any] = {
         "id": "apr_1",
         "action": "issue_payout",
@@ -338,15 +342,16 @@ def approval(claim: str, amount: int, **changed: Any) -> Approval:
         "decided_by": "handler-1",
         "state": ApprovalState.CARRYING_OUT,
     }
-    return Approval(**{**base, **changed})
+    return approval_record(Approval(**{**base, **changed}))
 
 
 PAYOUTS = [
-    # (case, claim, the approval, key sent, paid?, what is said when refused)
+    # (case, claim, the record, approval named, key sent, paid?, what is said when refused)
     (
-        "a handler's grant above the limit",
+        "granted by a handler above the limit",
         "CLM-010004",
         approval("CLM-010004", 25001),
+        "apr_1",
         KEY,
         True,
         "",
@@ -355,80 +360,144 @@ PAYOUTS = [
         "the limit's own grant, on the limit",
         "CLM-010003",
         approval("CLM-010003", 25000, decided_by=srv.AUTOMATIC_APPROVER),
+        "apr_1",
         KEY,
         True,
         "",
     ),
     (
-        "the limit's own grant, past the limit",
+        "carried out already: a retry under its key",
         "CLM-010004",
-        approval("CLM-010004", 25001, decided_by=srv.AUTOMATIC_APPROVER),
+        approval("CLM-010004", 25001, state=ApprovalState.DONE),
+        "apr_1",
         KEY,
-        False,
-        "no person decided",
+        True,
+        "",
     ),
-    ("no approval named", "CLM-010001", None, KEY, False, "needs an approval"),
     (
-        "refused by the handler",
+        "another amount",
         "CLM-010004",
-        approval("CLM-010004", 25001, granted=False),
+        approval("CLM-010004", 20000),
+        "apr_1",
         KEY,
         False,
-        "not granted",
+        "decided for another amount",
+    ),
+    (
+        "another claim",
+        "CLM-010004",
+        approval("CLM-010001", 25001),
+        "apr_1",
+        KEY,
+        False,
+        "decided for another claim_id",
+    ),
+    (
+        "another person",
+        "CLM-010004",
+        approval("CLM-010004", 25001, customer_id=MEERA),
+        "apr_1",
+        KEY,
+        False,
+        "for another person",
+    ),
+    (
+        "another key",
+        "CLM-010004",
+        approval("CLM-010004", 25001),
+        "apr_1",
+        "run-2:1:0",
+        False,
+        "requested as another call",
     ),
     (
         "expired",
         "CLM-010004",
         approval("CLM-010004", 25001, expires_at=NOW - 1),
+        "apr_1",
         KEY,
         False,
         "expired",
     ),
     (
-        "another call's key",
+        "above the limit, decided by the automatic limit",
         "CLM-010004",
-        approval("CLM-010004", 25001),
-        "run-2:1:0",
-        False,
-        "another call",
-    ),
-    (
-        "another policyholder's",
-        "CLM-010004",
-        approval("CLM-010004", 25001, customer_id=MEERA),
+        approval("CLM-010004", 25001, decided_by=srv.AUTOMATIC_APPROVER),
+        "apr_1",
         KEY,
         False,
-        "another policyholder",
+        "no person decided",
+    ),
+    (
+        "an unknown approval",
+        "CLM-010004",
+        approval("CLM-010004", 25001),
+        "apr_unknown",
+        KEY,
+        False,
+        "needs an approval",
+    ),
+    ("no approval named", "CLM-010001", None, None, KEY, False, "needs an approval"),
+    (
+        "refused by the handler",
+        "CLM-010004",
+        approval("CLM-010004", 25001, granted=False, state=ApprovalState.REFUSED),
+        "apr_1",
+        KEY,
+        False,
+        "not granted",
+    ),
+    (
+        "still waiting for a handler",
+        "CLM-010004",
+        approval("CLM-010004", 25001, decided=False, granted=False, state=ApprovalState.WAITING),
+        "apr_1",
+        KEY,
+        False,
+        "not granted",
     ),
     (
         "approved by the policyholder",
         "CLM-010004",
         approval("CLM-010004", 25001, decided_by=ROHAN),
+        "apr_1",
         KEY,
         False,
         "nobody but",
     ),
-    ("another claim", "CLM-010004", approval("CLM-010001", 25001), KEY, False, "another claim"),
-    ("another amount", "CLM-010004", approval("CLM-010004", 20000), KEY, False, "amount 25001"),
+    (
+        "granted for another action",
+        "CLM-010004",
+        approval("CLM-010004", 25001, action="withdraw_claim"),
+        "apr_1",
+        KEY,
+        False,
+        "it approved withdraw_claim",
+    ),
 ]
 
 
+@pytest.mark.discharges("P-PAYOUT", "AHC-0057")
 @pytest.mark.parametrize(
-    ("case", "claim", "grant", "key", "paid", "why"), PAYOUTS, ids=[p[0] for p in PAYOUTS]
+    ("case", "claim", "grant", "named", "key", "paid", "why"),
+    PAYOUTS,
+    ids=[p[0] for p in PAYOUTS],
 )
-async def test_money_moves_only_on_a_decision_that_covers_this_payout(
-    case: str, claim: str, grant: Approval | None, key: str, paid: bool, why: str
+async def test_money_moves_only_on_a_record_that_covers_this_payout(
+    case: str,
+    claim: str,
+    grant: ApprovalRecord | None,
+    named: str | None,
+    key: str,
+    paid: bool,
+    why: str,
 ) -> None:
+    """A3: the far end reads the agent's own record through the records port and
+    rebuilds the call's digest — this claim, the amount it holds, the
+    policyholder it verified, the key on the call — never the wait's engine."""
     held = {grant.id: grant} if grant is not None else {}
     async with claims(held, now=NOW) as (client, _):
-        said = await call(
-            client,
-            "issue_payout",
-            {"id": claim},
-            who=ROHAN,
-            key=key,
-            grant=grant.id if grant else None,
-        )
+        said = await call(client, "issue_payout", {"id": claim}, who=ROHAN, key=key, grant=named)
         after = await call(client, "get_claim", {"id": claim}, who=ROHAN)
     assert (after.structured_content["status"] == "paid") is paid, case
     if paid:
@@ -465,6 +534,38 @@ async def test_a_row_another_writer_holds_is_transient() -> None:
         "kind": "transient",
     }
     assert later.structured_content["allowed"] is True, "a transient refusal is not remembered"
+
+
+# (case, what the claims system's connection tries, what it gets)
+READ_ONLY = [
+    ("reads the record the wait wrote", "read", "carrying_out"),
+    ("reads nothing for an unknown id", "unknown", None),
+    ("cannot write a record", "write", "read-only"),
+]
+
+
+@pytest.mark.discharges("P-PAYOUT", "AHC-0057")
+@pytest.mark.parametrize(("case", "move", "expected"), READ_ONLY, ids=[r[0] for r in READ_ONLY])
+async def test_the_claims_system_reads_the_agents_records_and_cannot_write_them(
+    case: str, move: str, expected: str | None
+) -> None:
+    """A3 on PostgreSQL: the agent's migrations make the tables, the wait's store
+    writes the record, and the claims system reads it through the records port
+    on its own connection, opened read-only."""
+    grant = approval("CLM-010004", 25001)
+    async with throwaway("claims_records") as url:
+        await migrate_agent_state(url)
+        async with pool(url) as opened:
+            await PostgresRecords(opened).put_approval(grant)
+        async with approval_records(url) as records:
+            if move == "write":
+                with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
+                    await records.put_approval(grant)  # type: ignore[attr-defined]
+                return
+            found = await records.approval(grant.id if move == "read" else "apr_unknown")
+    assert (found.status if found else None) == expected, case
+    if found is not None:
+        assert found.args_digest == grant.args_digest, case
 
 
 # ------------------------------------------------------------ the spec's own

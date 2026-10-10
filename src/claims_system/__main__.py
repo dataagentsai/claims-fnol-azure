@@ -1,7 +1,10 @@
 """`python -m claims_system migrate | seed [--fresh | --if-empty] | serve [--port N]`.
 
-Reads `CLAIMS_DATABASE_URL` (and, to check payouts against the approval wait,
-`CLAIMS_DBOS_DATABASE_URL`) from the environment or `.env`.
+Reads `CLAIMS_DATABASE_URL` and, to check payouts against the agent's own
+approval records (A3), `CLAIMS_RECORDS_DATABASE_URL` from the environment or
+`.env`. The records URL is meant for a role that may only read
+`agent_state.approvals` (A4); until that role exists it falls back to
+`CLAIMS_DBOS_DATABASE_URL`, and the connection is opened read-only either way.
 """
 
 from __future__ import annotations
@@ -9,10 +12,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import yaml
+from agent_harness.contracts.records import ApprovalRecordReader
+from psycopg.conninfo import make_conninfo
 
 from claims_system import store as st
 
@@ -33,6 +40,18 @@ def env(name: str, default: str | None = None) -> str:
     if default is None:
         raise SystemExit(f"{name} is not set (environment or .env)")
     return default
+
+
+@asynccontextmanager
+async def approval_records(url: str) -> AsyncIterator[ApprovalRecordReader]:
+    """The agent's approval records, read through the harness's records port on
+    a connection of this system's own that cannot write (A3, A4)."""
+    from agent_harness.state.postgres import pool
+    from agent_harness.state.records import PostgresRecords
+
+    read_only = make_conninfo(url, options="-c default_transaction_read_only=on")
+    async with pool(read_only, min_size=1, max_size=2) as opened:
+        yield PostgresRecords(opened)
 
 
 def world_records(path: Path = WORLD) -> dict[str, list[dict[str, Any]]]:
@@ -56,11 +75,10 @@ def _serve(port: int, host: str) -> None:
     from claims_system import server
 
     url = env("CLAIMS_DATABASE_URL")
-    dbos_url = env("CLAIMS_DBOS_DATABASE_URL", "")
+    records_url = env("CLAIMS_RECORDS_DATABASE_URL", env("CLAIMS_DBOS_DATABASE_URL", ""))
 
     async def run() -> None:
-        async with st.Store.open(url) as store:
-            approvals = server.dbos_approvals(dbos_url) if dbos_url else None
+        async with st.Store.open(url) as store, _records(records_url) as approvals:
             mcp = server.build(store, approvals=approvals)
             app = mcp.streamable_http_app(host=host)
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
@@ -68,6 +86,16 @@ def _serve(port: int, host: str) -> None:
             await uvicorn.Server(config).serve()
 
     asyncio.run(run())
+
+
+@asynccontextmanager
+async def _records(url: str) -> AsyncIterator[ApprovalRecordReader | None]:
+    """No URL, no records: every payout is refused for want of an approval."""
+    if not url:
+        yield None
+        return
+    async with approval_records(url) as records:
+        yield records
 
 
 def main() -> None:

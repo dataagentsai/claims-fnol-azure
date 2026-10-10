@@ -5,7 +5,8 @@ a collision and gets a claim reference from the claims system; a payout above
 ₹25,000 waits until a claims handler approves it on the desk, and is then paid;
 a payout at the limit is paid at once; claim status is answered with no model
 call. Everything real except the model: the claims system's MCP server on its
-own throwaway database, the DBOS waits and the agent's state on another.
+own throwaway database, the DBOS waits, the agent's state and its own approval
+records on another, which the claims system reads read-only (A3).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from claims_fnol_app import signin
 from claims_fnol_app.compose import compose, hooks, overlay
 from claims_system import server as srv
 from claims_system import store as st
-from claims_system.__main__ import world_records
+from claims_system.__main__ import approval_records, world_records
 
 
 def says(text: str = "", *calls: tuple[str, dict[str, object]]) -> ModelResponse:
@@ -75,8 +76,8 @@ async def app(script: Iterable[ModelResponse]) -> AsyncIterator[App]:
     async with throwaway("claims_app") as claims_url, throwaway("claims_agent") as agent_url:
         await st.migrate(claims_url)
         await st.seed(claims_url, world_records())
-        async with st.Store.open(claims_url) as store:
-            server = srv.build(store, approvals=srv.dbos_approvals(agent_url))
+        async with st.Store.open(claims_url) as store, approval_records(agent_url) as records:
+            server = srv.build(store, approvals=records)
             given = hooks(script=script, claims_server=server)
             with pytest.MonkeyPatch.context() as env:
                 env.setenv("CLAIMS_DBOS_DATABASE_URL", agent_url)

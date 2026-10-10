@@ -16,12 +16,16 @@ the AgentTwin world does; the Azure binding replaces it with a verified Entra
 token (Tier 4). Whichever, ownership is decided here, by the row.
 
 **Paying money needs a decision this system can read.** `issue_payout` must name
-an approval (`aoas/approval`), which this system loads from where the approval
-wait keeps it and checks covers *this* call: granted, unexpired, for this
-operation, this policyholder, this claim and amount, this idempotency key, and
-not decided by the policyholder. Above the automatic limit, the decision must be
-a person's. The limit is restated here, not imported — the far end's own
-statement of the rule (AOAS `issue_payout.authority`).
+an approval (`aoas/approval`). This system reads the agent's own record of it
+through the harness's records port (`ApprovalRecordReader`, A3) on a read-only
+connection of its own — never the wait's engine, so DBOS's storage format is not
+on the money path — and checks it covers *this* call: granted and unexpired, and
+its `args_digest` equal to the one rebuilt from the call as received (this
+operation, this claim, the amount this system holds, the policyholder it
+verified, the idempotency key on the call); and not decided by the
+policyholder. Above the automatic limit, the decision must be a person's. The
+limit is restated here, not imported — the far end's own statement of the rule
+(AOAS `issue_payout.authority`).
 
 Each tool also declares its `entity`, so the agent's freshness re-read picks the
 right reader without help from its binding (FINDINGS F-11).
@@ -34,7 +38,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from agent_harness.contracts import Approval
+from agent_harness.contracts.records import ApprovalRecord, ApprovalRecordReader, refusals
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
@@ -87,9 +91,6 @@ DESCRIPTIONS = {
 Authorise = Callable[[str, dict[str, Any], Mapping[str, object]], Awaitable[str | None]]
 """`async (operation, arguments, meta) -> policyholder id | None`; raise
 `ToolError` to refuse the call."""
-
-ApprovalLoader = Callable[[str], Awaitable[Approval | None]]
-"""Load an approval record by id from wherever the approval wait keeps it."""
 
 IncidentType = Literal["collision", "theft", "fire", "flood", "glass", "vandalism"]
 ClaimRef = Annotated[str, Field(description="The claim's reference, CLM- and six digits.")]
@@ -144,33 +145,33 @@ def _tool_meta(operation: str, side_effect: str, entity: str) -> dict[str, str]:
 
 
 def covers(
-    approval: Approval | None,
+    approval: ApprovalRecord | None,
     *,
     holder: str,
     claim: Row,
     key: str | None,
     now: float,
 ) -> str | None:
-    """Why this approval does not cover paying this claim now, or `None`."""
+    """Why this approval record does not cover paying this claim now, or `None`.
+
+    The call is rebuilt as this system received it — the claim, the amount this
+    system holds for it, the policyholder it verified, the key on the call — and
+    its digest must be the record's (`agent_harness.contracts.records.refusals`)."""
     if approval is None:
         return "issue_payout needs an approval, and none this system can read was named"
     amount = Decimal(str(claim.get("approved_amount", 0)))
-    named = {str(v) for v in approval.args.values()}
-    reasons = [
-        (not (approval.decided and approval.granted), "it was not granted"),
-        (now >= approval.expires_at, "it has expired"),
-        (approval.action != "issue_payout", f"it approved {approval.action}"),
-        (approval.customer_id != holder, "it is for another policyholder"),
-        (approval.decided_by in (None, holder), "nobody but the policyholder approved it"),
-        (key != approval.idempotency_key, "it was requested as another call"),
-        (str(claim["id"]) not in named, "it is for another claim"),
-        (str(amount) not in named, f"it was not decided on the amount {amount}"),
-        (
-            amount > AUTOMATIC_LIMIT and approval.decided_by == AUTOMATIC_APPROVER,
-            f"{amount} is above the automatic limit, and no person decided it",
-        ),
-    ]
-    failed = [why for broken, why in reasons if broken]
+    failed = refusals(
+        approval,
+        action="issue_payout",
+        args={"claim_id": str(claim["id"]), "amount": str(amount)},
+        requested_for=holder,
+        idempotency_key=key or "",
+        now=now,
+    )
+    if approval.decided_by in (None, holder):
+        failed.append("nobody but the policyholder approved it")
+    if amount > AUTOMATIC_LIMIT and approval.decided_by == AUTOMATIC_APPROVER:
+        failed.append(f"{amount} is above the automatic limit, and no person decided it")
     if not failed:
         return None
     return f"approval {approval.id} does not cover this payout: {'; '.join(failed)}"
@@ -180,7 +181,7 @@ def build(
     store: Store,
     *,
     authorise: Authorise = asserted,
-    approvals: ApprovalLoader | None = None,
+    approvals: ApprovalRecordReader | None = None,
     clock: Callable[[], float] = time.time,
 ) -> MCPServer:
     """The store, as an MCP server that decides for itself whose rows these are."""
@@ -197,7 +198,7 @@ def build(
         meta = _meta(ctx)
         approval_id = meta.get(APPROVAL_META)
         loaded = (
-            await approvals(approval_id)
+            await approvals.approval(approval_id)
             if approvals is not None and isinstance(approval_id, str)
             else None
         )
@@ -283,29 +284,6 @@ def _writes(server: MCPServer, store: Store, holder: Holder, payable: Payable) -
         return await store.issue_payout(who, id, key=_key(_meta(ctx)))
 
 
-APPROVAL_RECORD = "approval"
-"""The event the approval wait publishes its record under
-(`agent_harness.approvals.dbos.RECORD`), restated: this system reads the wait's
-record, it does not run the wait."""
-
-
-def dbos_approvals(system_database_url: str) -> ApprovalLoader:
-    """Approvals as the DBOS wait keeps them: its record event, read with a
-    DBOS client and no DBOS runtime of this system's own."""
-    from dbos import DBOSClient
-
-    held: list[DBOSClient] = []
-
-    async def load(approval_id: str) -> Approval | None:
-        # Made on first use: the wait's tables exist once the agent has launched.
-        if not held:
-            held.append(DBOSClient(system_database_url=system_database_url))
-        found = await held[0].get_event_async(approval_id, APPROVAL_RECORD, timeout_seconds=0)
-        return found if isinstance(found, Approval) else None
-
-    return load
-
-
 __all__ = [
     "APPROVAL_META",
     "AUTOMATIC_APPROVER",
@@ -313,11 +291,9 @@ __all__ = [
     "IDEMPOTENCY_META",
     "SCOPES",
     "SESSION_META",
-    "ApprovalLoader",
     "Authorise",
     "NotAuthorised",
     "asserted",
     "build",
     "covers",
-    "dbos_approvals",
 ]

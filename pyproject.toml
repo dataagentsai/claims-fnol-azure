@@ -131,6 +131,15 @@ type = "independence"
 modules = ["claims_fnol", "claims_system"]
 
 [[tool.importlinter.contracts]]
+# A3: the claims system checks a payout against the agent's own approval record,
+# read through the harness's records port — never the wait's engine. DBOS's
+# storage format is off the money path, so swapping the engine cannot break it.
+name = "The claims system reads approvals only through the records port, never DBOS"
+type = "forbidden"
+source_modules = ["claims_system"]
+forbidden_modules = ["dbos", "agent_harness.state.dbos"]
+
+[[tool.importlinter.contracts]]
 name = "Nothing imports the composition root"
 type = "forbidden"
 source_modules = ["claims_fnol", "claims_system", "agent_harness"]
