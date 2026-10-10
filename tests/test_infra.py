@@ -287,3 +287,141 @@ def test_the_model_check_comes_before_any_paid_call() -> None:
     inbound = POLICY[POLICY.index("<inbound>") : POLICY.index("</inbound>")]
     assert inbound.index("allowed-models") < inbound.index("content-safety-endpoint")
     assert inbound.index("allowed-models") < inbound.index("<rate-limit")
+
+
+# ------------------------------------------------------- Tier 4a A4: one login per app
+POSTGRES = (INFRA / "modules" / "postgres.bicep").read_text()
+DB_ROLES = (INFRA / "hooks" / "db-roles.sh").read_text()
+KV_SECRET_REF = re.compile(r"secret: '([\w-]+)'")
+LISTED = re.compile(r"secretNames:\s*\[([^\]]*)\]")
+
+
+def readable(app: str) -> set[str]:
+    """Every vault secret an app's identity or container gets: its container's
+    Key Vault references and its per-secret read access (keyvault-access)."""
+    container, access = {
+        "agent": ("agent", "agentSecrets"),
+        "claims": ("claimsSystem", "claimsSecrets"),
+    }[app]
+    listed = LISTED.search(MODULES[access][1])
+    assert listed, f"{access} lists no secrets"
+    return set(KV_SECRET_REF.findall(MODULES[container][1])) | set(
+        re.findall(r"'([\w-]+)'", listed.group(1))
+    )
+
+
+SECRET_ACCESS = [
+    # (app, secret, may it read it)
+    ("agent", "agent-database-url", True),
+    ("agent", "claims-database-url", False),
+    ("agent", "claims-records-database-url", False),
+    ("agent", "postgres-admin-password", False),
+    ("agent", "postgres-agent-password", False),
+    ("agent", "postgres-claims-system-password", False),
+    ("claims", "claims-database-url", True),
+    ("claims", "claims-records-database-url", True),
+    ("claims", "agent-database-url", False),
+    ("claims", "postgres-admin-password", False),
+    ("claims", "postgres-agent-password", False),
+    ("claims", "postgres-claims-system-password", False),
+]
+
+
+@pytest.mark.discharges("AHC-0040")
+@pytest.mark.parametrize(
+    ("app", "secret", "may"),
+    SECRET_ACCESS,
+    ids=[f"{a} {'reads' if m else 'never reads'} {s}" for a, s, m in SECRET_ACCESS],
+)
+def test_each_app_reads_only_its_own_database_login(app: str, secret: str, may: bool) -> None:
+    assert (secret in readable(app)) is may
+
+
+@pytest.mark.discharges("AHC-0040")
+def test_what_each_app_may_read_is_exactly_what_it_reads() -> None:
+    agent_access = LISTED.search(MODULES["agentSecrets"][1])
+    assert agent_access
+    assert set(re.findall(r"'([\w-]+)'", agent_access.group(1))) == references(OVERLAY, "key_vault")
+    assert not KV_SECRET_REF.findall(MODULES["agent"][1]), "the agent reads its secrets itself"
+    claims_access = LISTED.search(MODULES["claimsSecrets"][1])
+    assert claims_access
+    assert set(re.findall(r"'([\w-]+)'", claims_access.group(1))) == set(
+        KV_SECRET_REF.findall(MODULES["claimsSystem"][1])
+    )
+    for app in ("agentSecrets", "claimsSecrets"):
+        assert MODULES[app][0] == "modules/keyvault-access.bicep"
+    readers = MODULES["keyVault"][1].split("readerPrincipalIds:")[1].split("]")[0]
+    assert re.findall(r"identities\.outputs\.(\w+)", readers) == ["apimPrincipalId"], (
+        "no app identity may read the whole vault"
+    )
+
+
+DATABASE_URLS = [
+    # (vault secret, the login it must name, its database)
+    ("agent-database-url", "agent", "claims_fnol_dbos"),
+    ("claims-database-url", "claimsSystem", "claims_fnol"),
+    ("claims-records-database-url", "claimsSystem", "claims_fnol_dbos"),
+]
+
+
+@pytest.mark.discharges("AHC-0040")
+@pytest.mark.parametrize(
+    ("secret", "login", "database"), DATABASE_URLS, ids=[u[0] for u in DATABASE_URLS]
+)
+def test_each_database_url_names_an_app_login_never_the_administrator(
+    secret: str, login: str, database: str
+) -> None:
+    at = re.search(rf"name: '{secret}'\s*properties:\s*\{{\s*value: '([^']+)'", POSTGRES)
+    assert at, f"postgres.bicep writes no {secret}"
+    assert at.group(1).startswith(f"postgresql://${{{login}}}@"), at.group(1)
+    assert f":5432/{database}?sslmode=require" in at.group(1)
+    assert "administrator" not in at.group(1)
+
+
+ROLE_HOOK = [
+    ("postprovision runs it", r'"\$here/db-roles\.sh"', "post"),
+    ("it runs the same roles.sql as dev-up", r'-f "\$root/infra/sql/roles\.sql"', "hook"),
+    ("the agent's login", r"-v agent_role=claims_agent", "hook"),
+    ("the claims system's login", r"-v system_role=claims_system", "hook"),
+    (
+        "the admin password from Key Vault",
+        r"PGPASSWORD=\"\$\(secret postgres-admin-password\)\"",
+        "hook",
+    ),
+    ("the agent's password from Key Vault", r"\$\(secret postgres-agent-password\)", "hook"),
+    ("the claims system's from Key Vault", r"\$\(secret postgres-claims-system-password\)", "hook"),
+    ("over TLS", r"PGSSLMODE=require", "hook"),
+    (
+        "azd generates the agent's password",
+        r"secretOrRandomPassword \$\{AZURE_KEY_VAULT_NAME\} postgres-agent-password",
+        "params",
+    ),
+    (
+        "azd generates the claims system's",
+        r"secretOrRandomPassword \$\{AZURE_KEY_VAULT_NAME\} postgres-claims-system-password",
+        "params",
+    ),
+    ("the vault keeps the agent's", r"name: 'postgres-agent-password'", "vault"),
+    ("the vault keeps the claims system's", r"name: 'postgres-claims-system-password'", "vault"),
+]
+
+
+@pytest.mark.discharges("AHC-0040")
+@pytest.mark.parametrize(("what", "pattern", "where"), ROLE_HOOK, ids=[r[0] for r in ROLE_HOOK])
+def test_the_postprovision_hook_makes_the_logins_from_vault_passwords(
+    what: str, pattern: str, where: str
+) -> None:
+    text = {
+        "post": (INFRA / "hooks" / "postprovision.sh").read_text(),
+        "hook": DB_ROLES,
+        "params": (INFRA / "main.parameters.json").read_text(),
+        "vault": (INFRA / "modules" / "keyvault.bicep").read_text(),
+    }[where]
+    assert re.search(pattern, text), what
+
+
+def test_the_role_hook_never_prints_a_password() -> None:
+    assert os.access(INFRA / "hooks" / "db-roles.sh", os.X_OK)
+    for line in DB_ROLES.splitlines():
+        if re.match(r"\s*(echo|printf)\b", line):
+            assert "PASSWORD" not in line, line

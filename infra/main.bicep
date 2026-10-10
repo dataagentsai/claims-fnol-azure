@@ -55,8 +55,16 @@ param entraAppId string = ''
 param claimsSystemAppId string = ''
 
 @secure()
-@description('PostgreSQL administrator password: azd\'s secretOrRandomPassword (main.parameters.json).')
+@description('PostgreSQL administrator password: azd\'s secretOrRandomPassword (main.parameters.json). Only the postprovision hook logs in with it, to make the two app logins (A4).')
 param postgresAdminPassword string
+
+@secure()
+@description('The agent\'s database login (claims_agent, A4): azd\'s secretOrRandomPassword, kept in Key Vault.')
+param postgresAgentPassword string
+
+@secure()
+@description('The claims system\'s database login (claims_system, A4): azd\'s secretOrRandomPassword, kept in Key Vault.')
+param postgresClaimsSystemPassword string
 
 @description('Image the agent app starts with until `azd deploy` sets the real one.')
 param agentImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
@@ -112,15 +120,17 @@ module keyVault 'modules/keyvault.bicep' = {
     location: location
     tags: tags
     name: 'kv-fnol-${token}'
+    // APIM only. Each app's identity reads just its own secrets (agentSecrets,
+    // claimsSecrets below, A4): never the other's login, never a password.
     readerPrincipalIds: [
-      identities.outputs.agentPrincipalId
-      identities.outputs.claimsPrincipalId
       identities.outputs.apimPrincipalId
     ]
     ownerPrincipalId: principalId
     groqKeyInVault: groqKeyInVault
     entraSecretInVault: entraSecretInVault
     postgresAdminPassword: postgresAdminPassword
+    postgresAgentPassword: postgresAgentPassword
+    postgresClaimsSystemPassword: postgresClaimsSystemPassword
   }
 }
 
@@ -144,6 +154,8 @@ module postgres 'modules/postgres.bicep' = {
     tags: tags
     name: 'pg-fnol-${token}'
     administratorPassword: postgresAdminPassword
+    agentPassword: postgresAgentPassword
+    claimsSystemPassword: postgresClaimsSystemPassword
     entraAdminObjectId: principalId
     entraAdminName: principalName
     ownerIpAddress: ownerIpAddress
@@ -202,6 +214,40 @@ module environment 'modules/containerapps-env.bicep' = {
   }
 }
 
+// Tier 4a A4: which secrets each app's identity may read, one by one. The
+// agent's list is the {key_vault: name} references of config/azure.yaml; the
+// claims system's, its container's Key Vault references. tests/test_infra.py
+// holds both, and that no app may read another's login or any password.
+module agentSecrets 'modules/keyvault-access.bicep' = {
+  name: 'agent-secrets'
+  scope: rg
+  params: {
+    keyVaultName: keyVault.outputs.name
+    principalId: identities.outputs.agentPrincipalId
+    secretNames: [
+      'agent-database-url'
+      'appinsights-connection-string'
+      'apim-subscription-key'
+      'agent-obo-client-secret'
+    ]
+  }
+  dependsOn: [postgres, monitoring, apim]
+}
+
+module claimsSecrets 'modules/keyvault-access.bicep' = {
+  name: 'claims-secrets'
+  scope: rg
+  params: {
+    keyVaultName: keyVault.outputs.name
+    principalId: identities.outputs.claimsPrincipalId
+    secretNames: [
+      'claims-database-url'
+      'claims-records-database-url'
+    ]
+  }
+  dependsOn: [postgres]
+}
+
 module claimsSystem 'modules/containerapp.bicep' = {
   name: 'claims-system'
   scope: rg
@@ -228,14 +274,14 @@ module claimsSystem 'modules/containerapp.bicep' = {
       { name: 'CLAIMS_SYSTEM_APP_ID', value: claimsSystemAppId }
     ]
     keyVaultSecrets: [
+      // Its own login (claims_system, A4) for both: its database, and the
+      // agent's approval records (F-23, A3), which that login may only SELECT.
+      // Never the agent's URL. tests/test_infra.py holds this list.
       { name: 'claims-database-url', secret: 'claims-database-url', variable: 'CLAIMS_DATABASE_URL' }
-      // The claims system checks a payout against the agent's own approval
-      // records (F-23, A3), on a read-only connection. A4 gives it a role that
-      // can only read agent_state.approvals; until then, the agent's URL.
-      { name: 'agent-database-url', secret: 'agent-database-url', variable: 'CLAIMS_RECORDS_DATABASE_URL' }
+      { name: 'claims-records-database-url', secret: 'claims-records-database-url', variable: 'CLAIMS_RECORDS_DATABASE_URL' }
     ]
   }
-  dependsOn: [postgres]
+  dependsOn: [postgres, claimsSecrets]
 }
 
 module agent 'modules/containerapp.bicep' = {
@@ -268,7 +314,7 @@ module agent 'modules/containerapp.bicep' = {
       { name: 'ENTRA_APP_ID', value: entraAppId }
     ]
   }
-  dependsOn: [postgres]
+  dependsOn: [postgres, agentSecrets]
 }
 
 // azd writes these to .azure/<env>/.env. The first block is also each app's
@@ -288,6 +334,7 @@ output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
 output AZURE_APIM_NAME string = apim.outputs.name
 output AZURE_POSTGRES_SERVER string = postgres.outputs.name
 output AZURE_POSTGRES_HOST string = postgres.outputs.host
+output AZURE_POSTGRES_ADMIN string = postgres.outputs.administratorLogin
 output AZURE_CONTENT_SAFETY_ENDPOINT string = contentSafety.outputs.endpoint
 output AZURE_CONTAINER_APPS_ENVIRONMENT string = environment.outputs.name
 output AGENT_URL string = agent.outputs.url

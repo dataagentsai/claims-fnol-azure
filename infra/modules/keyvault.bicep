@@ -5,9 +5,10 @@
 //
 // WHICH CONCERN IT SERVES
 //   Secrets (stack binding `secrets: key-vault`; FINDINGS F-33). Access is by
-//   Azure RBAC, not access policies: "Key Vault Secrets User" (read) for each
-//   app's identity and for APIM (the Groq key and the named values), "Key Vault
-//   Secrets Officer" (write) for the owner who runs the hooks.
+//   Azure RBAC, not access policies: "Key Vault Secrets User" (read) on the
+//   vault for APIM (the Groq key and the named values); each app's identity
+//   gets it only on its own secrets, one by one (keyvault-access.bicep, A4);
+//   "Key Vault Secrets Officer" (write) for the owner who runs the hooks.
 //
 //   The Groq key is never in a file or a parameter: infra/hooks/postprovision.sh
 //   prompts for it and runs `az keyvault secret set`. Until then this module
@@ -30,7 +31,7 @@ param location string
 param name string
 param tags object = {}
 
-@description('Principal ids that may read secrets: the two apps\' identities.')
+@description('Principal ids that may read every secret: APIM only. The apps read theirs one by one (keyvault-access.bicep, A4).')
 param readerPrincipalIds array
 
 @description('The owner running azd (AZURE_PRINCIPAL_ID): may write secrets from the hooks. Empty skips it.')
@@ -45,6 +46,14 @@ param entraSecretInVault bool = false
 @secure()
 @description('The PostgreSQL administrator password (azd secretOrRandomPassword), kept here so azd reads the same one back next time.')
 param postgresAdminPassword string
+
+@secure()
+@description('The agent\'s database login\'s password (claims_agent, A4), kept for the same reason; the postprovision hook sets it on the server.')
+param postgresAgentPassword string
+
+@secure()
+@description('The claims system\'s database login\'s password (claims_system, A4), likewise.')
+param postgresClaimsSystemPassword string
 
 var secretsUser = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 var secretsOfficer = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7' // Key Vault Secrets Officer
@@ -123,6 +132,24 @@ resource postgresPassword 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'postgres-admin-password'
   properties: {
     value: postgresAdminPassword
+  }
+}
+
+// The two app logins' passwords (A4). Only the owner running the hooks reads
+// them (infra/hooks/db-roles.sh); no app identity may (keyvault-access.bicep).
+resource postgresAgentSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: vault
+  name: 'postgres-agent-password'
+  properties: {
+    value: postgresAgentPassword
+  }
+}
+
+resource postgresClaimsSystemSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: vault
+  name: 'postgres-claims-system-password'
+  properties: {
+    value: postgresClaimsSystemPassword
   }
 }
 

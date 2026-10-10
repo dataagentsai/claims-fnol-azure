@@ -10,6 +10,10 @@
 # 2. The Entra app registration (infra/hooks/entra-app.sh): Bicep's Microsoft
 #    Graph extension is a preview, so the az CLI does it, idempotently.
 #
+# 3. The apps' own database logins (infra/hooks/db-roles.sh, Tier 4a A4):
+#    Bicep cannot make a PostgreSQL role, so psql does, as the administrator,
+#    with every password read from Key Vault and never echoed.
+#
 # Needs `az` signed in to the same tenant as azd. azd passes its environment
 # (the deployment's outputs) to this script as variables.
 set -euo pipefail
@@ -39,3 +43,4 @@ else
 fi
 
 "$here/entra-app.sh"
+"$here/db-roles.sh"

@@ -147,6 +147,21 @@ apps run a public placeholder image.
    Asked only while the vault holds the placeholder. Then the Entra app
    registration is created or brought up to date, and you are given the
    `desk.handler` role.
+   Last, the apps' own database logins (A4, `infra/hooks/db-roles.sh`): psql
+   from this Mac, as the PostgreSQL administrator, runs `infra/sql/roles.sql`,
+   the same script dev-up runs. `claims_agent` gets `claims_fnol_dbos`,
+   `claims_system` gets `claims_fnol` and `SELECT` on `agent_state.approvals`
+   only. Every password (the administrator's and one per login) is made by azd
+   (`secretOrRandomPassword`), kept in Key Vault and read from there without
+   being shown. It needs `psql` and your IP in the firewall (the preprovision
+   question); without them the hook stops and says so, and the apps cannot log
+   in until `azd hooks run postprovision` succeeds.
+
+Each app's identity may read only its own secrets in Key Vault, one role
+assignment per secret (`infra/modules/keyvault-access.bicep`): the agent its
+database URL (`claims_agent`), its telemetry, APIM key and Entra secret; the
+claims system its two URLs (`claims_system`). Neither may read the other's
+login or any PostgreSQL password; only APIM reads the vault as a whole.
 
 Once Tier 4 has pushed the images:
 

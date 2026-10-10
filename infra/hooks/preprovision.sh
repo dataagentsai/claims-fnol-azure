@@ -3,7 +3,8 @@
 # set in the azd environment, asking only for what azd cannot know.
 #
 #   BUDGET_CONTACT_EMAIL   asked once: where the $10 budget's alerts go
-#   OWNER_IP_ADDRESS       asked once, optional: your IP, for psql from the Mac
+#   OWNER_IP_ADDRESS       asked once: your IP, for psql from the Mac (the
+#                          postprovision hook makes the apps' logins with it, A4)
 #   AZURE_PRINCIPAL_NAME   your sign-in name (the PostgreSQL Entra admin's label)
 #   GROQ_KEY_IN_VAULT      true once the real Groq key is in Key Vault, so the
 #                          placeholder secret is never written over it
@@ -28,7 +29,7 @@ if [[ -z "$(value BUDGET_CONTACT_EMAIL)" ]]; then
 fi
 
 if ! azd env get-values | grep -q '^OWNER_IP_ADDRESS='; then
-  read -r -p "Your public IP, to reach PostgreSQL from this Mac (Enter to skip): " ip
+  read -r -p "Your public IP, to reach PostgreSQL from this Mac (Enter to skip; the apps' database logins then wait for it): " ip
   azd env set OWNER_IP_ADDRESS "${ip:-}" >/dev/null
 fi
 
