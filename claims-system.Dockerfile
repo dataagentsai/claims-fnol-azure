@@ -18,8 +18,9 @@
 # start, so seeding every time would reset the demo claims (FINDINGS F-45);
 # reset on purpose with `python -m claims_system seed --fresh`.
 #
-# Reads CLAIMS_DATABASE_URL and CLAIMS_DBOS_DATABASE_URL from the environment
-# (Container Apps fills both from Key Vault).
+# Reads CLAIMS_DATABASE_URL and CLAIMS_RECORDS_DATABASE_URL from the
+# environment (Container Apps fills both from Key Vault): its own login, the
+# claims_system role (A4), never the agent's.
 
 ARG PYTHON_IMAGE=python:3.13-slim
 

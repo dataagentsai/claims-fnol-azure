@@ -42,12 +42,20 @@ Needs: the Homebrew PostgreSQL service running (`brew services list` shows
 `postgresql@16 started`; the scripts never start or stop it), `uv`, and a `.env`
 (copy `.env.example`; it holds the database URLs and `GROQ_API_KEY`, and is
 gitignored). The databases are `claims_fnol` (the claims system) and
-`claims_fnol_dbos` (the DBOS waits and the agent's own state), owned by the role
-`claims_fnol`. To create them on a new machine:
+`claims_fnol_dbos` (the DBOS waits and the agent's own state). Each app logs in
+as its own role (A4, `infra/sql/roles.sql`):
 
-    psql -d postgres -c "CREATE ROLE claims_fnol LOGIN CREATEDB PASSWORD '<password>'"
-    psql -d postgres -c "CREATE DATABASE claims_fnol OWNER claims_fnol"
-    psql -d postgres -c "CREATE DATABASE claims_fnol_dbos OWNER claims_fnol"
+| Role | Owns | In the other database |
+|---|---|---|
+| `claims_agent` | `claims_fnol_dbos`: `agent_state.*` and DBOS's `dbos.*` (DBOS makes its schema at launch, as this role) | no CONNECT on `claims_fnol` |
+| `claims_system` | `claims_fnol` and its tables | CONNECT, and `SELECT` on `agent_state.approvals` only |
+| `claims_fnol` (admin) | nothing an app uses | makes the databases and the two roles; no app runs as it |
+
+On a new machine, make only the admin role; `scripts/dev-up.sh` does the rest
+(the databases, both roles, a password per role kept in `.env`, the grants), and
+on an existing setup hands over what the admin role made before A4:
+
+    psql -d postgres -c "CREATE ROLE claims_fnol LOGIN CREATEDB CREATEROLE PASSWORD '<password>'"
 
 Start, use, stop:
 

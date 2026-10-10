@@ -6,7 +6,8 @@ a collision and gets a claim reference from the claims system; a payout above
 a payout at the limit is paid at once; claim status is answered with no model
 call. Everything real except the model: the claims system's MCP server on its
 own throwaway database, the DBOS waits, the agent's state and its own approval
-records on another, which the claims system reads read-only (A3).
+records on another, which the claims system reads read-only (A3). Each app logs
+in as its own role (A4, infra/sql/roles.sql), as dev-up and Azure run them.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import pytest
 from agent_harness import adapters
 from agent_harness import identity as ident
 from agent_harness.identity.local import LocalIssuer
-from pg import throwaway
+from pg import least_privilege, throwaway
 
 from claims_fnol.contracts import ModelResponse, ToolCall, Usage
 from claims_fnol_app import signin
@@ -90,14 +91,22 @@ async def app(script: Iterable[ModelResponse]) -> AsyncIterator[App]:
     """The app and the claims system as on this Mac: every call carries a token
     the app's local issuer minted for the claims system, which verifies it with
     the app's keys (`config/claims-system/local.yaml`, A1)."""
-    async with throwaway("claims_app") as claims_url, throwaway("claims_agent") as agent_url:
+    async with (
+        throwaway("claims_app") as claims_db,
+        throwaway("claims_agent") as agent_db,
+        least_privilege(claims_db, agent_db) as roles,
+    ):
+        # Each app on its own login (A4): the claims system makes its tables as
+        # itself and reads approvals on a login that can do nothing else; the
+        # agent's state, records and DBOS run as the agent's login.
+        claims_url, agent_url = roles.claims_url, roles.agent_url
         await st.migrate(claims_url)
         await st.seed(claims_url, world_records())
         published = AppKeys()
         checked = adapters.plan(claims_overlay("local"))
         async with (
             st.Store.open(claims_url) as store,
-            approval_records(agent_url) as records,
+            approval_records(roles.records_url) as records,
             authorisation(checked, hooks={"keys": published}) as authorise,
         ):
             server = srv.build(store, authorise=authorise, approvals=records)

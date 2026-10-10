@@ -2,9 +2,9 @@
 
 Reads `CLAIMS_DATABASE_URL` and, to check payouts against the agent's own
 approval records (A3), `CLAIMS_RECORDS_DATABASE_URL` from the environment or
-`.env`. The records URL is meant for a role that may only read
-`agent_state.approvals` (A4); until that role exists it falls back to
-`CLAIMS_DBOS_DATABASE_URL`, and the connection is opened read-only either way.
+`.env`. Both name this system's own login (A4, infra/sql/roles.sql), which
+in the agent's database may only read `agent_state.approvals`; never the
+agent's URL. The records connection is also opened read-only, a second guard.
 
 How it checks its caller is its own overlay's (A1): `config/claims-system/
 <CLAIMS_SYSTEM_ENV>.yaml`, default `local`, composed through the harness's
@@ -104,7 +104,7 @@ def _serve(port: int, host: str) -> None:
     from claims_system import server
 
     url = env("CLAIMS_DATABASE_URL")
-    records_url = env("CLAIMS_RECORDS_DATABASE_URL", env("CLAIMS_DBOS_DATABASE_URL", ""))
+    records_url = env("CLAIMS_RECORDS_DATABASE_URL", "")
     planned = adapters.plan(overlay())
 
     async def run() -> None:

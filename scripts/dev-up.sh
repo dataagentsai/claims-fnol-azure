@@ -5,7 +5,10 @@
 #   scripts/dev-up.sh --fresh    the same, after dropping every claim the demo made
 #
 # PostgreSQL is the shared Homebrew service (brew services, postgresql@16) and is
-# never started or stopped here. Logs and pids go to .state/ (gitignored).
+# never started or stopped here. Each app logs in as its own role (A4):
+# scripts/dev_roles.py makes claims_agent and claims_system if missing, hands
+# them the databases (also ones the admin role made before A4), and keeps their
+# passwords in .env; the admin role `claims_fnol` only makes databases and roles. Logs and pids go to .state/ (gitignored).
 # scripts/dev-down.sh stops what this started.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,6 +27,9 @@ pg_isready -h 127.0.0.1 -p 5432 -q || {
 
 uv sync --all-extras --frozen -q
 PY=.venv/bin/python
+
+echo "Database logins"
+"$PY" scripts/dev_roles.py
 
 echo "Claims system database"
 "$PY" -m claims_system migrate
