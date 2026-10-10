@@ -242,6 +242,28 @@ a limit above the AOAS's is a spec change, not a setting.
 On this Mac the same key is `PAYOUT_AUTOMATIC_LIMIT_INR` in `.env`, re-read
 every 5 seconds (`config/local.yaml`).
 
+### Pause the agent (not run yet)
+
+The kill switch is the App Configuration key `agent.enabled` under the label
+`dev` (Tier 4a A13). The agent reads it before every turn and re-reads it every
+30 seconds. Pause the agent: `az appconfig kv set --name <store> --key agent.enabled --label dev --value false --yes`
+
+```bash
+STORE=$(azd env get-value AZURE_APP_CONFIGURATION_ENDPOINT | sed -E 's#https://([^.]+)\..*#\1#')
+az appconfig kv set --name $STORE --key agent.enabled --label dev --value false --yes
+az appconfig kv set --name $STORE --key agent.enabled --label dev --value true --yes   # back on
+```
+
+Within 30 seconds every new message gets the paused reply ("The claims
+assistant is paused for now…"): no model call and no route runs, the message
+is kept on the conversation, and the turn is counted as
+`agent.turns{result="paused"}` with `agent.enabled = false` on its span.
+Approvals and escalations already waiting at the handler desk are not
+cancelled and can still be decided there. A value that is not `true` or
+`false` is refused and the last good one kept. `azd provision` writes the
+key back to `true` (FINDINGS F-88). On this Mac it is `AGENT_ENABLED=false` in
+`.env`, re-read every 5 seconds.
+
 ### Remove it
 
     azd down --purge

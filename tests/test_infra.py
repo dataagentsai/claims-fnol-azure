@@ -480,6 +480,14 @@ APP_CONFIGURATION: list[tuple[str, Callable[[], bool]]] = [
         ),
     ),
     (
+        "A13: the kill switch is agent.enabled under the same label, true unless set",
+        lambda: (
+            "name: 'agent.enabled$${label}'" in APPCONFIG
+            and "param agentEnabled bool = true" in APPCONFIG
+            and "value: agentEnabled ? 'true' : 'false'" in APPCONFIG
+        ),
+    ),
+    (
         "both containers are told where the store is",
         lambda: (
             "AZURE_APP_CONFIGURATION_ENDPOINT" in AGENT_ENV

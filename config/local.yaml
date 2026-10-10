@@ -17,6 +17,8 @@ bindings:
   # `payout.automatic_limit_inr`, read here as PAYOUT_AUTOMATIC_LIMIT_INR. The
   # .env file is re-read every ttl_s, so a change there reaches the next payout
   # without a restart; one exported into the process environment cannot.
+  # A13: the kill switch, `agent.enabled`, read here as AGENT_ENABLED (true when
+  # unset); AGENT_ENABLED=false in .env pauses every new turn within ttl_s.
   config:
     adapter: environment-settings
     why: no App Configuration on a Mac — the environment first, then .env (gitignored)

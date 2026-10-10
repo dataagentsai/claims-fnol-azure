@@ -15,8 +15,10 @@ library's registry (`agent_harness.adapters`):
 
 The `config` port (A6) is built first, on its own: the payout policy reads the
 automatic limit through it at every decision, and the policy is one of the
-hooks every other adapter is handed. So `compose` builds `secrets` and `config`,
-then the rest; the secrets reader is built twice, which costs nothing.
+hooks every other adapter is handed. The kill switch (A13) reads `agent.enabled`
+through it before every turn: the agent is wrapped in the harness's `Switched`.
+So `compose` builds `secrets` and `config`, then the rest; the secrets reader is
+built twice, which costs nothing.
 
 `CLAIMS_FNOL_ENV` names the overlay file and nothing else: no line here or in
 `edge.py` asks which environment it is, or which vendor an adapter is. What is
@@ -38,8 +40,10 @@ from typing import Any
 import psycopg
 from agent_harness import adapters
 from agent_harness.config.settings import Settings as ConfigPort
+from agent_harness.entrypoint import switch
 from starlette.applications import Starlette
 
+from claims_fnol import binding
 from claims_fnol import entrypoint as ep
 from claims_fnol.approvals import KEYS, PayoutWork, Policy
 from claims_fnol.config import Settings, resolve
@@ -75,8 +79,9 @@ async def migrate_agent_state(url: str) -> None:
 
 @asynccontextmanager
 async def settings(planned: adapters.Plan) -> AsyncIterator[ConfigPort]:
-    """The config port the overlay binds, with this agent's declared keys."""
-    wired = {"config": {"keys": KEYS}}
+    """The config port the overlay binds, with this agent's declared keys: the
+    payout limit (A6) and the kill switch, `agent.enabled` (A13)."""
+    wired = {"config": {"keys": (*KEYS, switch.ENABLED)}}
     async with adapters.compose(planned, hooks=wired, ports=("secrets", "config")) as built:
         yield built["config"]
 
@@ -110,7 +115,7 @@ async def compose(
         async with adapters.compose(planned, hooks=wired, ports=rest) as built:
             counted = Counted(built["model"])
             waits = built["approval"]
-            agent = ep.build(
+            built_agent = ep.build(
                 llm=counted,
                 tools=built["tool_runtime"].client,
                 store=built["state"].checkpoints,
@@ -119,6 +124,8 @@ async def compose(
                 deliveries=built["state"].requests,
                 config=config,
             )
+            # A13: every turn asks `agent.enabled` first; false is the paused reply.
+            agent = switch.Switched(built_agent, limits, reply=binding.PAUSED)
             usage_route = bool(planned.app.get("usage_route", False))
             yield edge.build(
                 agent, waits, built["identity"], counted=counted, usage_route=usage_route

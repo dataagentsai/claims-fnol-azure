@@ -13,10 +13,10 @@ import time
 from dataclasses import dataclass, field
 from typing import TextIO
 
+from agent_harness.entrypoint import TurnAgent
 from agent_harness.state import Conversation
 from agent_harness.telemetry import redact
 
-from claims_fnol import entrypoint as ep
 from claims_fnol.contracts import (
     CheckpointStore,
     Escalations,
@@ -77,7 +77,7 @@ class Logged:
     """The agent, with one console line per turn: its outcome and, for a refusal,
     the rule that refused it — what a trace backend shows, on a Mac with none."""
 
-    agent: ep.Agent
+    agent: TurnAgent
     out: TextIO = field(default=sys.stdout, repr=False)
 
     @property

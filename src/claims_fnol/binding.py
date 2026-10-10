@@ -25,6 +25,14 @@ UNREACHABLE = "I cannot reach our claims system right now."
 direct route and in the loop alike. The library's default is neutral; these are
 this insurer's words (FINDINGS F-14, fixed in agent_harness 205b04a)."""
 
+PAUSED = (
+    "The claims assistant is paused for now, so I cannot act on this message. It has"
+    " been saved with your conversation, and nothing about your claims has changed."
+    " Please try again later."
+)
+"""What every turn is told while `agent.enabled` is false (A13, the harness's
+`entrypoint.switch`). Promises no person and no time: none is arranged."""
+
 SCOPE_CLAIMS_READ = "claims:read"
 SCOPE_CLAIMS_WRITE = "claims:write"
 SCOPE_PAYOUTS_WRITE = "payouts:write"

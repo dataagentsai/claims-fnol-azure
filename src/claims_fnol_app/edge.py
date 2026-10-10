@@ -29,12 +29,12 @@ from agent_harness import identity as ident
 from agent_harness import serve
 from agent_harness.adapters.identity import Sessions
 from agent_harness.adapters.waits import Waits
+from agent_harness.entrypoint import TurnAgent
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import BaseRoute, Mount, Route
 
-from claims_fnol import entrypoint as ep
 from claims_fnol_app import signin
 from claims_fnol_app.pages import CHAT_PAGE, desk_router
 from claims_fnol_app.usage import Counted, Logged
@@ -49,7 +49,7 @@ def _policyholder(request: Request, sessions: Sessions) -> ident.Principal | Res
         return JSONResponse({"error": "the session token is not valid"}, status_code=401)
 
 
-def opening(agent: ep.Agent, sessions: Sessions) -> Route:
+def opening(agent: TurnAgent, sessions: Sessions) -> Route:
     async def show(request: Request) -> Response:
         who = _policyholder(request, sessions)
         if isinstance(who, Response):
@@ -78,7 +78,7 @@ def usage(counted: Counted) -> Route:
 
 
 def build(
-    agent: ep.Agent, held: Waits, sessions: Sessions, *, counted: Counted, usage_route: bool
+    agent: TurnAgent, held: Waits, sessions: Sessions, *, counted: Counted, usage_route: bool
 ) -> Starlette:
     """The whole app. One agent, one set of waits, one identity."""
     served = serve.build(

@@ -20,7 +20,8 @@ bindings:
   # A6: the automatic payout limit and anything else that changes without a
   # redeploy, read with the app's managed identity (App Configuration Data
   # Reader) under the label `dev`, re-read every 30 s. The claims system reads
-  # the same key and label (config/claims-system/azure.yaml).
+  # the same key and label (config/claims-system/azure.yaml). A13: the kill
+  # switch, `agent.enabled` (label dev), read before every turn.
   config:
     adapter: app-configuration
     endpoint: {env: AZURE_APP_CONFIGURATION_ENDPOINT}

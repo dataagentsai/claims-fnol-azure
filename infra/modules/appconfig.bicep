@@ -1,7 +1,7 @@
 // WHAT IT IS
 //   Azure App Configuration: settings and feature flags kept outside the image,
 //   changed in the portal or with `az appconfig kv set` without a redeploy. It
-//   holds two of this agent's numbers:
+//   holds three of this agent's settings:
 //     payout.automatic_limit_inr  (label dev)  25000  the automatic payout
 //                                 limit. The AOAS's issue_payout.authority is
 //                                 its default and its ceiling; the agent and
@@ -9,6 +9,12 @@
 //                                 (Tier 4a A6, FINDINGS F-71) and re-read it
 //                                 every 30 s, so lowering it reaches the next
 //                                 payout (Tier 5's exercise).
+//     agent.enabled  (label dev)  true   the kill switch (Tier 4a A13): false
+//                                 makes every new turn the paused reply, with
+//                                 no model call, within 30 s; approvals and
+//                                 escalations at the desk go on. Only the agent
+//                                 reads it. A provision writes this value back
+//                                 (FINDINGS F-88).
 //     online_sample_rate   1.0    the share of turns the online checks judge
 //                                 (evaluators.yaml, position `online`); not
 //                                 read yet (F-77)
@@ -39,6 +45,9 @@ param payoutLimitInr int = 25000
 @description('The label both apps read under (config/azure.yaml, config/claims-system/azure.yaml).')
 param label string = 'dev'
 
+@description('The kill switch the agent reads before every turn (A13). False pauses it.')
+param agentEnabled bool = true
+
 @description('A string, as Bicep has no decimal literals.')
 param onlineSampleRate string = '1.0'
 
@@ -63,6 +72,15 @@ resource payoutLimit 'Microsoft.AppConfiguration/configurationStores/keyValues@2
   name: 'payout.automatic_limit_inr$${label}'
   properties: {
     value: string(payoutLimitInr)
+    contentType: 'text/plain'
+  }
+}
+
+resource killSwitch 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = {
+  parent: store
+  name: 'agent.enabled$${label}'
+  properties: {
+    value: agentEnabled ? 'true' : 'false'
     contentType: 'text/plain'
   }
 }
