@@ -55,6 +55,10 @@ param postgresAgentPassword string
 @description('The claims system\'s database login\'s password (claims_system, A4), likewise.')
 param postgresClaimsSystemPassword string
 
+@secure()
+@description('The agent\'s session secret (A2): two keys are derived from it, for the sign-in\'s cookies and the stored refresh tokens. azd secretOrRandomPassword.')
+param sessionKey string
+
 var secretsUser = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 var secretsOfficer = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7' // Key Vault Secrets Officer
 
@@ -150,6 +154,16 @@ resource postgresClaimsSystemSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-0
   name: 'postgres-claims-system-password'
   properties: {
     value: postgresClaimsSystemPassword
+  }
+}
+
+// The agent's session secret (A2, config/azure.yaml state.session_key and
+// identity.session_key). Only the agent's identity reads it (agentSecrets).
+resource sessionKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: vault
+  name: 'agent-session-key'
+  properties: {
+    value: sessionKey
   }
 }
 

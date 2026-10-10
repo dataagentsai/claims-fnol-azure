@@ -54,6 +54,13 @@ param entraAppId string = ''
 @description('The claims system\'s Entra app id (CLAIMS_SYSTEM_APP_ID, recorded by the same hook): the audience it checks every caller\'s token for (A1).')
 param claimsSystemAppId string = ''
 
+@description('The token claim the policyholder id is read from (A2, FINDINGS F-91): the directory extension attribute `customer_id` on the agent\'s app registration, which Entra emits as `extn.customer_id`. One setting: the agent\'s sign-in, the claims system\'s caller check and the Entra hook (which names the attribute from it) all read HOLDER_CLAIM.')
+param holderClaim string = 'extn.customer_id'
+
+@secure()
+@description('The secret the agent derives two keys from (A2): one seals the sign-in\'s cookies, one encrypts stored refresh tokens (agent_state.sessions). azd\'s secretOrRandomPassword, kept in Key Vault as agent-session-key.')
+param sessionKey string
+
 @secure()
 @description('PostgreSQL administrator password: azd\'s secretOrRandomPassword (main.parameters.json). Only the postprovision hook logs in with it, to make the two app logins (A4).')
 param postgresAdminPassword string
@@ -76,6 +83,12 @@ param claimsSystemImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 param allowedModels string = 'openai/gpt-oss-120b'
 
 var resourceGroupName = 'rg-claims-fnol-dev'
+// The agent's own address, known before the app exists: a Container App's
+// FQDN is its name under the environment's default domain. The sign-in's
+// redirect URI (A2) is in the agent's own environment, which agent.outputs
+// cannot be (a module cannot read its own output).
+var agentUrl = 'https://ca-fnol-agent.${environment.outputs.defaultDomain}'
+var signInRedirectUri = '${agentUrl}/signin/callback'
 var token = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
   'azd-env-name': environmentName
@@ -131,6 +144,7 @@ module keyVault 'modules/keyvault.bicep' = {
     postgresAdminPassword: postgresAdminPassword
     postgresAgentPassword: postgresAgentPassword
     postgresClaimsSystemPassword: postgresClaimsSystemPassword
+    sessionKey: sessionKey
   }
 }
 
@@ -233,6 +247,7 @@ module agentSecrets 'modules/keyvault-access.bicep' = {
       'appinsights-connection-string'
       'apim-subscription-key'
       'agent-obo-client-secret'
+      'agent-session-key'
     ]
   }
   dependsOn: [postgres, monitoring, apim]
@@ -276,6 +291,8 @@ module claimsSystem 'modules/containerapp.bicep' = {
       { name: 'CLAIMS_SYSTEM_ENV', value: 'azure' }
       { name: 'AZURE_TENANT_ID', value: tenant().tenantId }
       { name: 'CLAIMS_SYSTEM_APP_ID', value: claimsSystemAppId }
+      // A2: the policyholder id's claim, the same name the agent reads.
+      { name: 'HOLDER_CLAIM', value: holderClaim }
       // A6: the automatic payout limit, the agent's key and label (one source of truth).
       { name: 'AZURE_APP_CONFIGURATION_ENDPOINT', value: appConfig.outputs.endpoint }
     ]
@@ -318,6 +335,9 @@ module agent 'modules/containerapp.bicep' = {
       { name: 'CLAIMS_MCP_URL', value: '${claimsSystem.outputs.url}/mcp' }
       { name: 'AZURE_APP_CONFIGURATION_ENDPOINT', value: appConfig.outputs.endpoint }
       { name: 'ENTRA_APP_ID', value: entraAppId }
+      // A2: the policyholder's sign-in (code flow + PKCE) and its claim.
+      { name: 'ENTRA_REDIRECT_URI', value: signInRedirectUri }
+      { name: 'HOLDER_CLAIM', value: holderClaim }
     ]
   }
   dependsOn: [postgres, agentSecrets]
@@ -332,6 +352,8 @@ output CLAIMS_MCP_URL string = '${claimsSystem.outputs.url}/mcp'
 output AZURE_APP_CONFIGURATION_ENDPOINT string = appConfig.outputs.endpoint
 output ENTRA_APP_ID string = entraAppId
 output CLAIMS_SYSTEM_APP_ID string = claimsSystemAppId
+output ENTRA_REDIRECT_URI string = signInRedirectUri
+output HOLDER_CLAIM string = holderClaim
 
 // For the hooks, the README and the portal tour.
 output AZURE_LOCATION string = location

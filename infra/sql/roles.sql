@@ -90,6 +90,7 @@ SET client_min_messages TO warning;
 SET ROLE :"agent_role";
 \ir ../../src/claims_fnol_app/migrations/001_agent_state.sql
 \ir ../../src/claims_fnol_app/migrations/002_records.sql
+\ir ../../src/claims_fnol_app/migrations/003_sessions.sql
 RESET ROLE;
 
 -- The claims system reads approvals and nothing else. Revoked first, so a

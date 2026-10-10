@@ -5,8 +5,11 @@ under `/ops`; the chat page and the handler page are `claims_fnol_app.pages`,
 handed to it the way the reference agent's `serve`/`reviewer` hand theirs.
 Around it, three routes of this app's own:
 
-    /signin       local test sign-in, where the identity adapter can sign
-                  (`local-dev`); no other adapter can, so it exists nowhere else
+    /signin       the sign-in port (A2): the local test page where the identity
+                  adapter can sign (`local-dev`, `signin.py`); the code flow
+                  with PKCE where it has a browser sign-in (`entra-id` with
+                  `login_redirect_uri`, `signin_flow.py`); `/signin/logout`
+                  in both
     /.well-known/jwks.json
                   that signer's public keys, so the claims system can verify
                   the tokens it mints for it (A1); only where there is a signer
@@ -29,13 +32,14 @@ from agent_harness import identity as ident
 from agent_harness import serve
 from agent_harness.adapters.identity import Sessions
 from agent_harness.adapters.waits import Waits
+from agent_harness.contracts import SessionStore
 from agent_harness.entrypoint import TurnAgent
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import BaseRoute, Mount, Route
 
-from claims_fnol_app import signin
+from claims_fnol_app import signin, signin_flow
 from claims_fnol_app.pages import CHAT_PAGE, desk_router
 from claims_fnol_app.usage import Counted, Logged
 
@@ -78,9 +82,16 @@ def usage(counted: Counted) -> Route:
 
 
 def build(
-    agent: TurnAgent, held: Waits, sessions: Sessions, *, counted: Counted, usage_route: bool
+    agent: TurnAgent,
+    held: Waits,
+    sessions: Sessions,
+    *,
+    counted: Counted,
+    usage_route: bool,
+    stored: SessionStore | None = None,
 ) -> Starlette:
-    """The whole app. One agent, one set of waits, one identity."""
+    """The whole app. One agent, one set of waits, one identity. `stored` keeps
+    the code flow's refresh tokens (`state.session_key`); without it, none is."""
     served = serve.build(
         Logged(agent),
         # The identity adapter's own verifier, at /chat, /feedback and the desk
@@ -99,12 +110,18 @@ def build(
         routes += [
             Route("/signin", signin.signin_page, methods=["GET"]),
             Route("/signin", signin.signin, methods=["POST"]),
+            Route("/signin/logout", signin.signout, methods=["POST"]),
             Route("/.well-known/jwks.json", published(sessions.signer.jwks), methods=["GET"]),
         ]
+    code_flow = None
+    if sessions.login is not None and sessions.sealer is not None:
+        code_flow = signin_flow.CodeFlow(sessions.login, sessions.sealer, sessions.verify, stored)
+        routes += signin_flow.routes()
     if usage_route:
         routes.append(usage(counted))
     app = Starlette(routes=[*routes, Mount("/", app=served)])
     app.state.local_issuer = sessions.signer
+    app.state.code_flow = code_flow
     return app
 
 

@@ -43,6 +43,9 @@ REFERENCES = {
     "AZURE_TENANT_ID": TENANT,
     "ENTRA_APP_ID": "11111111-0000-0000-0000-00000000a9e7",
     "agent-obo-client-secret": "test-secret",
+    "HOLDER_CLAIM": "extn.customer_id",
+    "ENTRA_REDIRECT_URI": "https://agent.test/signin/callback",
+    "agent-session-key": "test-session-secret",
 }
 
 
@@ -82,7 +85,7 @@ def mint(environment: str, sessions: Sessions, *, handler: bool) -> str:
         claims["roles"] = ["desk.handler"]
     else:
         claims["scp"] = " ".join(sorted(POLICYHOLDER_SCOPES))
-        claims[ident.CLAIM_CUSTOMER] = "PH-1001"
+        claims[REFERENCES["HOLDER_CLAIM"]] = "PH-1001"
     return jwt.encode(claims, ENTRA_KEY._key, algorithm="RS256", headers={"kid": KID})
 
 

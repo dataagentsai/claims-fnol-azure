@@ -5,8 +5,8 @@ overlay's `identity: local-dev`): an RS256 key made once per process, sessions
 signed with the private half, the agent verifying with the public half exactly
 as it would with a real realm. What is this agent's is who the test users are
 and where each lands. The page is mounted only where the identity adapter can
-sign (`edge.build`), so an overlay binding Entra ID has no sign-in page at all.
-Sessions die with the process: restart, sign in again.
+sign (`edge.build`); an overlay binding Entra ID has the code flow at `/signin`
+instead (`signin_flow.py`, A2). Sessions die with the process: restart, sign in again.
 """
 
 from __future__ import annotations
@@ -109,4 +109,20 @@ async def signin(request: Request) -> Response:
     return RedirectResponse(landing(signer, chosen), status_code=303)
 
 
-__all__ = ["AUDIENCE", "HANDLER_SCOPES", "URL", "USERS", "TestUser", "landing", "mint", "signin"]
+async def signout(_: Request) -> Response:
+    """Back to the test page. A local session lives only in the page that holds
+    it; nothing is stored, so there is nothing to end here."""
+    return RedirectResponse("/signin", status_code=303)
+
+
+__all__ = [
+    "AUDIENCE",
+    "HANDLER_SCOPES",
+    "URL",
+    "USERS",
+    "TestUser",
+    "landing",
+    "mint",
+    "signin",
+    "signout",
+]

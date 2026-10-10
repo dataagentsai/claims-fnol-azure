@@ -5,8 +5,10 @@ is the harness's (`agent_harness.serve`, `agent_harness.reviewer`), exactly as t
 reference agent's `serve`/`reviewer` wrap it; these are the words and layout.
 
 Both pages take the session token from the link, as the reference agent's do,
-and keep it only in the page's memory. Honest for a local test issuer; a
-deployment reads its session from the sign-in instead (Tier 4).
+and keep it only in the page's memory: the local test sign-in puts it in the
+query, the code flow (A2) in the fragment, which is then cleared from the
+address bar. On a 401 a page asks `/signin/refresh` once for a fresh token
+(the code flow's stored login); where there is none it says to sign in again.
 """
 
 from __future__ import annotations
@@ -62,7 +64,8 @@ button:disabled{opacity:.5;cursor:default}
 <header>
   <h1>Motor claims</h1>
   <span class="cid" id="cid">new conversation</span>
-  <a href="/signin" style="margin-left:auto;font-size:13px">switch user</a>
+  <form method="post" action="/signin/logout" style="margin-left:auto">
+    <button style="padding:4px 10px;font-size:13px">sign out</button></form>
 </header>
 <div id="log" aria-live="polite"></div>
 <form id="f" autocomplete="off">
@@ -71,7 +74,20 @@ button:disabled{opacity:.5;cursor:default}
   <button id="send">Send</button>
 </form>
 <script>
-const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const SESSION = {token: new URLSearchParams(location.hash.slice(1)).get("token")
+  || new URLSearchParams(location.search).get("token") || ""};
+if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+async function renewed(){
+  try { const r = await fetch("/signin/refresh", {method: "POST"});
+    if (!r.ok) return false; SESSION.token = (await r.json()).token || ""; return !!SESSION.token;
+  } catch (e) { return false; }
+}
+async function authed(path, options){
+  const go = () => fetch(path, {...(options || {}), headers: {...((options || {}).headers || {}),
+    "authorization": "Bearer " + SESSION.token}});
+  const first = await go();
+  return first.status === 401 && await renewed() ? go() : first;
+}
 let conversationId = null, pending = null;
 const log = document.getElementById("log"), form = document.getElementById("f");
 const input = document.getElementById("t"), send = document.getElementById("send");
@@ -88,9 +104,10 @@ function system(text){
   log.appendChild(el); log.scrollTop = log.scrollHeight;
 }
 async function opening(){
-  if (!TOKEN){ system("Not signed in. Go to /signin."); return; }
+  // A reload loses the in-memory token; a stored login (the code flow) gives it back.
+  if (!SESSION.token && !(await renewed())){ system("Not signed in. Go to /signin."); return; }
   try {
-    const res = await fetch("/opening", {headers: {"authorization": "Bearer " + TOKEN}});
+    const res = await authed("/opening");
     const data = await res.json();
     if (data.reply) bubble("them", data.reply, "opening · no model call");
     else system(data.error || "HTTP " + res.status);
@@ -106,9 +123,8 @@ form.addEventListener("submit", async e => {
   pending = delivery;
   bubble("me", text); input.value = ""; input.disabled = send.disabled = true;
   try {
-    const res = await fetch("/chat", {method: "POST", headers: {
-        "content-type": "application/json", "authorization": "Bearer " + TOKEN,
-        "idempotency-key": delivery},
+    const res = await authed("/chat", {method: "POST", headers: {
+        "content-type": "application/json", "idempotency-key": delivery},
       body: JSON.stringify({text, conversation_id: conversationId})});
     const data = await res.json();
     if (data.status === "already handled"){ system("already handled — not sent twice"); }
@@ -171,14 +187,27 @@ the wait re-reads the claim and pays it under its own login. Nobody at this desk
 moves money directly.</footer>
 </main>
 <script>
-const token = new URLSearchParams(location.search).get("token") || "";
-const head = {"authorization": "Bearer " + token, "content-type": "application/json"};
+const SESSION = {token: new URLSearchParams(location.hash.slice(1)).get("token")
+  || new URLSearchParams(location.search).get("token") || ""};
+if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+async function renewed(){
+  try { const r = await fetch("/signin/refresh", {method: "POST"});
+    if (!r.ok) return false; SESSION.token = (await r.json()).token || ""; return !!SESSION.token;
+  } catch (e) { return false; }
+}
+async function authed(path, options){
+  const go = () => fetch(path, {...(options || {}), headers: {...((options || {}).headers || {}),
+    "authorization": "Bearer " + SESSION.token}});
+  const first = await go();
+  return first.status === 401 && await renewed() ? go() : first;
+}
 const ago = s => s < 60 ? s + "s" : s < 3600 ? Math.floor(s/60) + "m" : Math.floor(s/3600) + "h";
 const esc = t => String(t).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const rupees = a => a ? "₹" + Number(a).toLocaleString("en-IN") : "";
 async function call(path, options){
-  const answered = await fetch(path, {headers: head, ...options});
+  const answered = await authed(path, {headers: {"content-type": "application/json"},
+                                      ...options});
   const body = await answered.json().catch(() => ({}));
   if (!answered.ok) throw new Error(body.detail || ("HTTP " + answered.status));
   return body;
@@ -243,14 +272,16 @@ async function one(path, into, render, nothing){
   } catch (wrong) { box.innerHTML = `<p class="empty">${esc(wrong.message)}</p>`; }
 }
 async function refresh(){
-  document.getElementById("who").textContent = token
-    ? "Signed in as a claims handler (local test sign-in)." : "Not signed in — go to /signin.";
+  document.getElementById("who").textContent = SESSION.token
+    ? "Signed in as a claims handler." : "Not signed in — go to /signin.";
   await Promise.all([
     one("/ops/approvals", "approvals", approval, "No payout is waiting for a decision."),
     one("/ops/escalations", "escalations", escalation, "Nobody is waiting for a person."),
   ]);
 }
-refresh(); setInterval(refresh, 5000);
+(SESSION.token ? Promise.resolve() : renewed()).then(() => {
+  refresh(); setInterval(refresh, 5000);
+});
 </script></body></html>
 """
 )

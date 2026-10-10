@@ -15,6 +15,7 @@
     "postgresAdminPassword": { "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} postgres-admin-password)" },
     "postgresAgentPassword": { "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} postgres-agent-password)" },
     "postgresClaimsSystemPassword": { "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} postgres-claims-system-password)" },
+    "sessionKey": { "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} agent-session-key)" },
     "agentImage": { "value": "${AGENT_IMAGE=mcr.microsoft.com/k8se/quickstart:latest}" },
     "claimsSystemImage": { "value": "${CLAIMS_SYSTEM_IMAGE=mcr.microsoft.com/k8se/quickstart:latest}" }
   }

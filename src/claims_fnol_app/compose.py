@@ -128,7 +128,12 @@ async def compose(
             agent = switch.Switched(built_agent, limits, reply=binding.PAUSED)
             usage_route = bool(planned.app.get("usage_route", False))
             yield edge.build(
-                agent, waits, built["identity"], counted=counted, usage_route=usage_route
+                agent,
+                waits,
+                built["identity"],
+                counted=counted,
+                usage_route=usage_route,
+                stored=built["state"].sessions,  # A2: the sign-in's refresh tokens
             )
 
 

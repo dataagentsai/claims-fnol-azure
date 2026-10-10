@@ -569,3 +569,82 @@ def test_the_overall_verdict_is_a_block_then_unavailable_then_pass() -> None:
         ("pass; prompt=pass; completion=skipped", "pass"),
     ]:
         assert verdict_of(header) == overall
+
+
+# ----------------------------------------- Tier 4a A2: the sign-in and the holder claim
+ENTRA_HOOK = (INFRA / "hooks" / "entra-app.sh").read_text()
+SIGN_IN = [
+    # (what, where, pattern)
+    (
+        "the agent's sign-in reads the holder claim from the one setting",
+        "agent",
+        r"holder_claim: \{env: HOLDER_CLAIM\}",
+    ),
+    (
+        "the claims system reads the same setting",
+        "claims",
+        r"holder_claim: \{env: HOLDER_CLAIM\}",
+    ),
+    ("one Bicep parameter, extn.customer_id", "main", r"param holderClaim string = 'extn\."),
+    (
+        "both containers are given it",
+        "main",
+        r"(?s)name: 'HOLDER_CLAIM', value: holderClaim.*name: 'HOLDER_CLAIM', value: holderClaim",
+    ),
+    (
+        "the hook names the extension attribute from it",
+        "hook",
+        r'attribute="\$\{holder_claim#extn\.\}"',
+    ),
+    (
+        "and puts it in both apps' access tokens",
+        "hook",
+        r'(?s)"optionalClaims": \$\{optional_claims\}.*"optionalClaims": \$\{optional_claims\}',
+    ),
+    (
+        "the redirect URI is the agent's /signin/callback",
+        "main",
+        r"signInRedirectUri = '\$\{agentUrl\}/signin/callback'",
+    ),
+    (
+        "registered as a web (server-redeemed) redirect, no SPA one",
+        "hook",
+        r'"web": \{"redirectUris": \$\{redirects\}\},\s*"spa": \{"redirectUris": \[\]\}',
+    ),
+    (
+        "the agent's sign-in by reference",
+        "agent",
+        r"login_redirect_uri: \{env: ENTRA_REDIRECT_URI\}",
+    ),
+    (
+        "the session secret from Key Vault",
+        "agent",
+        r"session_key: \{key_vault: agent-session-key\}",
+    ),
+    (
+        "azd makes the session secret",
+        "params",
+        r'"sessionKey": \{ "value": "\$\(secretOrRandomPassword \$\{AZURE_KEY_VAULT_NAME\} '
+        r'agent-session-key\)" \}',
+    ),
+    ("no user is made without a yes", "hook", r'\[\[ "\$answer" != "yes" \]\]'),
+]
+
+
+@pytest.mark.discharges("AHC-0004")
+@pytest.mark.parametrize(("what", "where", "pattern"), SIGN_IN, ids=[s[0] for s in SIGN_IN])
+def test_the_sign_in_and_the_holder_claim_are_wired(what: str, where: str, pattern: str) -> None:
+    text = {
+        "agent": (ROOT / "config" / "azure.yaml").read_text(),
+        "claims": (ROOT / "config" / "claims-system" / "azure.yaml").read_text(),
+        "main": MAIN,
+        "hook": ENTRA_HOOK,
+        "params": (INFRA / "main.parameters.json").read_text(),
+    }[where]
+    assert re.search(pattern, text), what
+
+
+@pytest.mark.discharges("AHC-0040")
+def test_only_the_agent_may_read_the_session_secret() -> None:
+    assert "agent-session-key" in readable("agent")
+    assert "agent-session-key" not in readable("claims")

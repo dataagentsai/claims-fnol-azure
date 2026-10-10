@@ -27,8 +27,10 @@ bindings:
     adapter: entra-id
     tenant: {env: AZURE_TENANT_ID}
     audience: {env: CLAIMS_SYSTEM_APP_ID}
-    # The policyholder id (F-43): Entra issues no such claim until a directory
-    # extension and a claims mapping put it in the token as `customer_id`.
-    holder_claim: customer_id
+    # The policyholder id (A2, F-91): the directory extension attribute the
+    # agent's sign-in reads too, the same {env: HOLDER_CLAIM} (`extn.customer_id`).
+    # The hook puts it in this app's tokens as well (an optional claim), so the
+    # claims system reads it from Entra's signature, never from the agent.
+    holder_claim: {env: HOLDER_CLAIM}
     role_scopes:
       payouts.issue: [claims:read, payouts:write]

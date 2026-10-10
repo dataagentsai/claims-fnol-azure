@@ -148,9 +148,23 @@ TABLE: list[tuple[str, str, str, list[str], bool]] = [
         ["SELECT * FROM agent_state.escalations"],
         False,
     ),
+    (
+        "system",
+        "records",
+        "SELECT agent_state.sessions (A2: stored logins)",
+        ["SELECT * FROM agent_state.sessions"],
+        False,
+    ),
     ("system", "claims", "INSERT into its own claim table", CLAIM, True),
     ("agent", "agent", "read and write agent_state.checkpoints", CHECKPOINT, True),
     ("agent", "agent", "write agent_state.approvals", [APPROVAL], True),
+    (
+        "agent",
+        "agent",
+        "keep a stored login in agent_state.sessions (A2)",
+        ["INSERT INTO agent_state.sessions VALUES ('sub-x', '\\x00', 0)"],
+        True,
+    ),
     ("agent", "agent", "SELECT dbos.workflow_status", ["SELECT * FROM dbos.workflow_status"], True),
     ("agent", "claims", "SELECT the claims database's claim", ["SELECT * FROM claim"], False),
 ]

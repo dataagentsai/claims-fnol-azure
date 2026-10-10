@@ -52,6 +52,9 @@ SIGNER = LocalIssuer()
 STRANGER = LocalIssuer()
 """Another key under the same id: what a forged token is signed with."""
 APPROVAL = "apr_edge"
+HOLDER_CLAIM = "extn.customer_id"
+"""What Entra names the policyholder-id extension attribute (A2, F-91); the
+container's HOLDER_CLAIM. Locally the claim is `customer_id`."""
 
 
 def mint(
@@ -69,7 +72,7 @@ def mint(
     now = int(time.time())
     claims: dict[str, Any] = {"sub": "login-1", "iat": now, "exp": now + ttl_s}
     if holder is not None:
-        claims[ident.CLAIM_CUSTOMER] = holder
+        claims[HOLDER_CLAIM if environment == "azure" else ident.CLAIM_CUSTOMER] = holder
     if environment == "azure":  # Entra: `uti`, `scp` a string, the workflow's app role
         claims |= {"iss": issuer or ENTRA_ISSUER, "aud": audience or CLAIMS_APP}
         claims |= {"uti": uuid.uuid4().hex, "azp": "agent-app"}
@@ -116,6 +119,7 @@ async def claims_system(environment: str) -> AsyncIterator[str]:
         env = pytest.MonkeyPatch()
         env.setenv("AZURE_TENANT_ID", TENANT)  # what the claims container is given
         env.setenv("CLAIMS_SYSTEM_APP_ID", CLAIMS_APP)
+        env.setenv("HOLDER_CLAIM", HOLDER_CLAIM)
         async with st.Store.open(url) as store, authorisation(planned, hooks=keys) as authorise:
             env.undo()
             server = srv.build(store, authorise=authorise, approvals=records)
