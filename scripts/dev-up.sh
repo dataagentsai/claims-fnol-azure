@@ -53,7 +53,10 @@ wait_for() {
 }
 
 echo "Starting"
-start claims-system "$PY" -m claims_system serve --port "$CLAIMS_PORT"
+# The claims system checks every caller's token (A1): tokens the app's local
+# issuer mints for it, verified with the keys the app publishes.
+CLAIMS_LOCAL_JWKS_URL="http://127.0.0.1:$AGENT_PORT/.well-known/jwks.json" \
+  start claims-system "$PY" -m claims_system serve --port "$CLAIMS_PORT"
 wait_for claims-system "http://127.0.0.1:$CLAIMS_PORT/mcp"
 CLAIMS_MCP_URL="http://127.0.0.1:$CLAIMS_PORT/mcp" start agent "$PY" -m claims_fnol_app --port "$AGENT_PORT"
 wait_for agent "http://127.0.0.1:$AGENT_PORT/healthz"
@@ -64,7 +67,7 @@ cat <<MSG
     Sign in        http://127.0.0.1:$AGENT_PORT/signin
                    Rohan Iyer (PH-1001) or Meera Khanna (PH-1002) → the chat
                    Asha Rao, claims handler → the handler desk
-    Claims system  http://127.0.0.1:$CLAIMS_PORT/mcp  (MCP, for the agent)
+    Claims system  http://127.0.0.1:$CLAIMS_PORT/mcp  (MCP, for the agent; a token on every call)
     Model usage    http://127.0.0.1:$AGENT_PORT/dev/usage
     Logs           $STATE/agent.log, $STATE/claims-system.log
 

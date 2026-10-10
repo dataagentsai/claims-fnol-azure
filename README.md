@@ -61,6 +61,14 @@ tried again. Logs are in `.state/agent.log` and `.state/claims-system.log`;
 every model call is one line in the agent's log, and the totals are at
 `http://127.0.0.1:8077/dev/usage`.
 
+The claims system believes no one's word for who is asking (A1). Every MCP call
+from the app carries a 5-minute token the app's local issuer mints for the
+claims system (`Authorization: Bearer`), and the claims system verifies it with
+the keys the app publishes at `http://127.0.0.1:8077/.well-known/jwks.json`
+(`config/claims-system/local.yaml`). A call with no token, or with the
+policyholder's own session token, is refused. If you start the app on another
+port (`AGENT_PORT`), `dev-up.sh` points the claims system at it.
+
 At `/signin`, pick **Rohan Iyer** (PH-1001) or **Meera Khanna** (PH-1002) for the
 chat, or **Asha Rao** (claims handler) for the desk. Then, as Rohan:
 
