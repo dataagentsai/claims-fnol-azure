@@ -18,6 +18,10 @@ evaluators:
   money_in_rupees: {kind: rule}            # F-25: never £, $ or €
   tool_selection: {kind: rule}             # the library's: a golden case's must-call
   must_include: {kind: rule}               # the library's: a golden case's must-include
+  # A9: APIM's Content Safety verdict on each model call (the x-content-safety
+  # header), recorded as a check result. It judges nothing again and never
+  # blocks: APIM already blocked. Skips locally, where there is no APIM.
+  content_safety: {kind: guardrail_log, source: x-content-safety}
 
 positions:
   # Inline, before the policyholder reads it: a fail is the safe reply. Each runs
@@ -38,6 +42,7 @@ positions:
     run:
       - {use: no_ungrounded_entity, on_fail: alert}
       - {use: money_in_rupees, on_fail: alert}
+      - {use: content_safety, on_fail: alert}   # A9: online only, never at reply (F-79)
 
   # Over golden cases and scenarios: a pass rate under `min` blocks the release.
   release:

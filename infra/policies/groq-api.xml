@@ -3,6 +3,13 @@
   prompt and the completion, then Groq with the key from Key Vault. Why these
   policies and not llm-token-limit / llm-content-safety, with sources: the
   header of infra/modules/apim.bicep (FINDINGS F-39, F-40).
+
+  Every response says what Content Safety found (Tier 4a A9), in one header the
+  agent records as a check result (the guardrail_log evaluator):
+    x-content-safety: <overall>; prompt=<verdict>; completion=<verdict>
+  each verdict pass | block:<category> | unavailable | skipped; the overall is
+  a block if either part blocked, else unavailable if either was, else pass
+  (skipped when neither part was screened).
 -->
 <policies>
   <inbound>
@@ -18,6 +25,7 @@
       <when condition="@(!"{{allowed-models}}".Split(',').Select(m => m.Trim()).Contains((string)context.Variables["model"]))">
         <return-response>
           <set-status code="403" reason="Model not allowed" />
+          <set-header name="x-content-safety" exists-action="override"><value>skipped; prompt=skipped; completion=skipped</value></set-header>
           <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
           <set-body>@(new JObject(new JProperty("error", new JObject(new JProperty("code", "model_not_allowed"), new JProperty("message", "This agent may not use model '" + (string)context.Variables["model"] + "'.")))).ToString())</set-body>
         </return-response>
@@ -75,7 +83,7 @@
           <when condition="@(((string)context.Variables["promptVerdict"]).StartsWith("block"))">
             <return-response>
               <set-status code="403" reason="Blocked by Content Safety" />
-              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["promptVerdict"])</value></set-header>
+              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["promptVerdict"] + "; prompt=" + (string)context.Variables["promptVerdict"] + "; completion=skipped")</value></set-header>
               <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
               <set-body>{"error":{"code":"content_safety","message":"the prompt was blocked by Content Safety"}}</set-body>
             </return-response>
@@ -120,7 +128,7 @@
           <when condition="@(((string)context.Variables["completionVerdict"]).StartsWith("block"))">
             <return-response>
               <set-status code="403" reason="Blocked by Content Safety" />
-              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["completionVerdict"])</value></set-header>
+              <set-header name="x-content-safety" exists-action="override"><value>@((string)context.Variables["completionVerdict"] + "; prompt=" + context.Variables.GetValueOrDefault<string>("promptVerdict", "skipped") + "; completion=" + (string)context.Variables["completionVerdict"])</value></set-header>
               <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
               <set-body>{"error":{"code":"content_safety","message":"the completion was blocked by Content Safety"}}</set-body>
             </return-response>
@@ -128,12 +136,31 @@
         </choose>
       </when>
     </choose>
-    <!-- Both verdicts on the response, for the trace and the guardrail_log plug-in. -->
+    <!-- The overall verdict and both parts on the response, for the trace and the
+         guardrail_log evaluator (A9). -->
     <set-header name="x-content-safety" exists-action="override">
-      <value>@("prompt=" + context.Variables.GetValueOrDefault<string>("promptVerdict", "skipped") + "; completion=" + context.Variables.GetValueOrDefault<string>("completionVerdict", "skipped"))</value>
+      <value>@{
+            var p = context.Variables.GetValueOrDefault<string>("promptVerdict", "skipped");
+            var c = context.Variables.GetValueOrDefault<string>("completionVerdict", "skipped");
+            var all = p.StartsWith("block") ? p : c.StartsWith("block") ? c
+                : (p == "unavailable" || c == "unavailable") ? "unavailable"
+                : (p + c) == "skippedskipped" ? "skipped" : "pass";
+            return all + "; prompt=" + p + "; completion=" + c;
+        }</value>
     </set-header>
   </outbound>
   <on-error>
     <base />
+    <!-- An error response says what was screened before it, as every response does. -->
+    <set-header name="x-content-safety" exists-action="override">
+      <value>@{
+            var p = context.Variables.GetValueOrDefault<string>("promptVerdict", "skipped");
+            var c = context.Variables.GetValueOrDefault<string>("completionVerdict", "skipped");
+            var all = p.StartsWith("block") ? p : c.StartsWith("block") ? c
+                : (p == "unavailable" || c == "unavailable") ? "unavailable"
+                : (p + c) == "skippedskipped" ? "skipped" : "pass";
+            return all + "; prompt=" + p + "; completion=" + c;
+        }</value>
+    </set-header>
   </on-error>
 </policies>

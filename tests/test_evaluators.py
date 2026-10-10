@@ -121,6 +121,7 @@ GOLDEN = EvalRequest(
         text="₹25,000 for CLM-010003 has been paid to the account on your policy.",
         tool_calls=(ToolCall(id="c1", name="request_payout", arguments={"id": "CLM-010003"}),),
         tool_results=(CLAIM, PAID),
+        gateway=({"x-content-safety": "pass; prompt=pass; completion=pass"},),
     ),
     tool_definitions=({"type": "function", "function": {"name": "request_payout"}},),
     context=(),
@@ -133,7 +134,8 @@ GOLDEN = EvalRequest(
 @pytest.mark.parametrize("name", sorted(pol.PLAN.evaluators))
 def test_every_configured_evaluator_runs_on_a_golden_case(name: str) -> None:
     result = judge(pol.PLAN.evaluators[name], GOLDEN)
-    assert (result.verdict, result.evaluator, result.provider) == ("pass", name, "ours")
+    whose = "gateway" if name == "content_safety" else "ours"
+    assert (result.verdict, result.evaluator, result.provider) == ("pass", name, whose)
     assert (result.score, result.cost) == (1.0, 0.0)
 
 
@@ -179,3 +181,30 @@ def test_moving_a_check_is_a_yaml_change(
     assert verdict.blocked is blocked
     online = [r.evaluator for r in moved.run_online(GOLDEN, key="t")]
     assert "money_in_rupees" in online  # the online position still watches for it
+
+
+# --------------------------------------------------------------------------- 5
+# A9: Content Safety's verdict, as APIM writes it on each model call, recorded by
+# the `content_safety` evaluator at `online`. (why, the header or none, verdict, label)
+SAFETY: list[tuple[str, str | None, str, str]] = [
+    ("pass", "pass; prompt=pass; completion=pass", "pass", "pass"),
+    ("block:Hate", "block:Hate; prompt=block:Hate; completion=skipped", "fail", "Hate"),
+    ("unavailable", "unavailable; prompt=unavailable; completion=skipped", "skip", "unavailable"),
+    ("header absent: no gateway verdict (local)", None, "skip", ""),
+]
+
+
+@pytest.mark.discharges("AHC-0028")
+@pytest.mark.parametrize(("why", "header", "verdict", "label"), SAFETY, ids=[s[0] for s in SAFETY])
+def test_content_safetys_verdict_is_recorded_online_and_never_blocks_a_reply(
+    why: str, header: str | None, verdict: str, label: str
+) -> None:
+    said = ({"x-content-safety": header},) if header is not None else ({},)
+    turn = EvalRequest(
+        query="Any news on CLM-010003?",
+        response=Response(text="CLM-010003 is approved.", tool_results=(CLAIM,), gateway=said),
+        meta=Meta(position="online", trace="t-safety"),
+    )
+    (result,) = [r for r in pol.PLAN.run_online(turn, key="t") if r.evaluator == "content_safety"]
+    assert (result.verdict, result.label) == (verdict, label)
+    assert pol.PLAN.where("content_safety") == ("online",)

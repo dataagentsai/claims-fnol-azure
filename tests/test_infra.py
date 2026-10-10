@@ -497,3 +497,67 @@ def test_the_payout_limit_is_one_labelled_key_both_apps_may_only_read(
     what: str, holds: Callable[[], bool]
 ) -> None:
     assert holds(), what
+
+
+# ------------------------------------------------------------- Tier 4a A9
+# Every response says what Content Safety found, in the one header the agent
+# records (the guardrail_log evaluator): "<overall>; prompt=<v>; completion=<v>".
+# (which response, the policy section it is made in, how the policy says it)
+CONTENT_SAFETY_HEADER: list[tuple[str, str, str]] = [
+    (
+        "a refused model: nothing was screened",
+        "inbound",
+        r'reason="Model not allowed" />\s*<set-header name="x-content-safety" '
+        r'exists-action="override"><value>skipped; prompt=skipped; completion=skipped<',
+    ),
+    (
+        "a blocked prompt: its category, then the parts",
+        "inbound",
+        r'<value>@\(\(string\)context\.Variables\["promptVerdict"\] \+ "; prompt=" \+ '
+        r'\(string\)context\.Variables\["promptVerdict"\] \+ "; completion=skipped"\)',
+    ),
+    (
+        "a blocked completion: its category, then both parts",
+        "outbound",
+        r'<value>@\(\(string\)context\.Variables\["completionVerdict"\] \+ "; prompt=" \+',
+    ),
+    (
+        "a served response: the overall verdict, then both parts",
+        "outbound",
+        r'return all \+ "; prompt=" \+ p \+ "; completion=" \+ c;',
+    ),
+    (
+        "an error response: the same",
+        "on-error",
+        r'return all \+ "; prompt=" \+ p \+ "; completion=" \+ c;',
+    ),
+]
+
+
+@pytest.mark.discharges("AHC-0094")
+@pytest.mark.parametrize(
+    ("which", "section", "pattern"),
+    CONTENT_SAFETY_HEADER,
+    ids=[c[0] for c in CONTENT_SAFETY_HEADER],
+)
+def test_every_response_says_what_content_safety_found(
+    which: str, section: str, pattern: str
+) -> None:
+    held = POLICY[POLICY.index(f"<{section}>") : POLICY.index(f"</{section}>")]
+    assert re.search(pattern, held), which
+
+
+@pytest.mark.discharges("AHC-0094")
+def test_the_overall_verdict_is_a_block_then_unavailable_then_pass() -> None:
+    """The policy's rule, and the evaluator reads the policy's header the same way."""
+    from agent_harness.evals.guardrail import verdict_of
+
+    assert 'p.StartsWith("block") ? p : c.StartsWith("block") ? c' in POLICY
+    assert '(p == "unavailable" || c == "unavailable") ? "unavailable"' in POLICY
+    assert POLICY.count('<set-header name="x-content-safety"') == 5
+    for header, overall in [
+        ("block:Hate; prompt=block:Hate; completion=skipped", "block:Hate"),
+        ("unavailable; prompt=unavailable; completion=pass", "unavailable"),
+        ("pass; prompt=pass; completion=skipped", "pass"),
+    ]:
+        assert verdict_of(header) == overall
