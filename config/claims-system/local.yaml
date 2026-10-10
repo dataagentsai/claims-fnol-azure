@@ -1,0 +1,25 @@
+# The claims system on this Mac (`scripts/dev-up.sh`): how it checks its caller.
+#
+# Read by claims_system.__main__ through agent_harness.adapters; CLAIMS_SYSTEM_ENV
+# names this file (default `local`). The claims system's own overlay, beside the
+# agent's (config/local.yaml): it binds only what a far end has — the `authorise`
+# port (A1) and the secrets reader its settings resolve through.
+apiVersion: harness-overlay/v1
+environment: local
+profile: ../../harness-profile.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: no Key Vault on a Mac — the environment first, then .env (gitignored)
+    dotenv: ../../.env
+  # Tokens the agent app's local issuer mints for this audience on every call
+  # (config/local.yaml: identity.far_end_audience), verified with the keys the
+  # app publishes. A new key each time the app starts, under a new id, so a
+  # restart of the app alone is picked up here.
+  authorise:
+    adapter: local-dev
+    issuer_url: http://local-issuer.test/realms/claims
+    audience: claims-system
+    jwks_uri: {env: CLAIMS_LOCAL_JWKS_URL, default: "http://127.0.0.1:8077/.well-known/jwks.json"}
+    holder_claim: customer_id

@@ -1,0 +1,14 @@
+# The claims system in the tests that are about its rows, not its caller
+# (tests/test_claims_system.py): it believes the session the test asserts, as
+# the AgentTwin world does. Only a `test` overlay may bind `asserted`; the
+# registry refuses it in any other (tests/test_claims_edge.py).
+apiVersion: harness-overlay/v1
+environment: test
+profile: ../../harness-profile.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: a test reads only its own process environment
+  authorise:
+    adapter: asserted

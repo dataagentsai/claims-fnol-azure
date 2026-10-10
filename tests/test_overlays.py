@@ -7,6 +7,9 @@
    nothing in it says `why`. The others say why wherever they leave it.
 3. No module of the composition root branches on the environment's name or a
    vendor's: `CLAIMS_FNOL_ENV` is read in one place, to pick the file.
+4. The claims system is composed the same way from its own overlays
+   (`config/claims-system/`, A1), `CLAIMS_SYSTEM_ENV` read in one place; its
+   overlays are held to their adapters in `tests/test_claims_edge.py`.
 """
 
 from __future__ import annotations
@@ -107,3 +110,19 @@ def test_no_module_branches_on_an_environment_or_a_vendor(module: str) -> None:
         if isinstance(node, ast.Constant) and node.value == "CLAIMS_FNOL_ENV"
     ]
     assert len(reads) == (1 if module == "compose.py" else 0), "only overlay() reads it"
+
+
+CLAIMS = Path(__file__).resolve().parents[1] / "src" / "claims_system"
+
+
+@pytest.mark.discharges("AHC-0004")
+@pytest.mark.parametrize("module", sorted(p.name for p in CLAIMS.glob("*.py")))
+def test_no_claims_system_module_branches_on_an_environment_or_a_vendor(module: str) -> None:
+    source = (CLAIMS / module).read_text()
+    assert not BRANCH.search(source), f"{module} compares against an environment or vendor name"
+    reads = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant) and node.value == "CLAIMS_SYSTEM_ENV"
+    ]
+    assert len(reads) == (1 if module == "__main__.py" else 0), "only overlay() reads it"

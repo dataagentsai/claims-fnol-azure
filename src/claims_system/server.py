@@ -10,10 +10,20 @@ agent's own tool, which asks the approval wait (`routes_to: issue_payout`), and
 `escalate` is the escalation wait. Neither is the claims system's; the AOAS's
 `external.claims_system.operations` lists the eight below and no others.
 
-**Who is asking** comes from the call's session (`aoas/session`), through the
-`authorise` hook. Locally the hook believes the session the agent asserts, as
-the AgentTwin world does; the Azure binding replaces it with a verified Entra
-token (Tier 4). Whichever, ownership is decided here, by the row.
+**Who is asking** is decided by the `authorise` port (`agent_harness.identity.
+far_end`, A1), bound by this system's own overlay (`config/claims-system/`):
+the bearer token the call carried — the `Authorization` header over HTTP, the
+session's `token` when the client is in this process — verified for this
+system's audience, the policyholder read from its claim, and the operation's
+scope checked against what the token grants. Never the agent's word: only a
+test overlay may bind `asserted`, which believes it, and the registry refuses
+it anywhere else. Whichever, ownership is decided here, by the row.
+
+**The payout workflow has no policyholder's session** when a handler approves
+an hour later. It calls under its own login: a token with no holder that holds
+`payouts:write`. For that caller alone, and only on a call that names an
+approval, the approval record says whose claim it is — and only for the claim
+that record is about; everything else it asks reads as unknown.
 
 **Paying money needs a decision this system can read.** `issue_payout` must name
 an approval (`aoas/approval`). This system reads the agent's own record of it
@@ -35,10 +45,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from agent_harness.contracts.records import ApprovalRecord, ApprovalRecordReader, refusals
+from agent_harness.identity.far_end import Authorise, Call, Caller, CallRefused
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
@@ -65,6 +77,13 @@ SCOPES = {
 binding has its own copy and filters its tool surface by it; a test holds the
 two equal."""
 
+READ_SCOPE = "claims:read"
+"""What a read requires of a verified caller. Not advertised per tool, as the
+agent's binding has no read scopes to filter by; every caller it sends holds it."""
+
+WORKFLOW_SCOPE = "payouts:write"
+"""What makes a caller with no holder the payout workflow's own login."""
+
 AUTOMATIC_LIMIT = Decimal("25000")
 """AOAS `issue_payout.authority.agent_when`: approved_amount at most ₹25,000."""
 AUTOMATIC_APPROVER = "policy:automatic-limit"
@@ -88,10 +107,6 @@ DESCRIPTIONS = {
 }
 """The claims system's own words (the world's `presents`)."""
 
-Authorise = Callable[[str, dict[str, Any], Mapping[str, object]], Awaitable[str | None]]
-"""`async (operation, arguments, meta) -> policyholder id | None`; raise
-`ToolError` to refuse the call."""
-
 IncidentType = Literal["collision", "theft", "fire", "flood", "glass", "vandalism"]
 ClaimRef = Annotated[str, Field(description="The claim's reference, CLM- and six digits.")]
 PolicyRef = Annotated[str, Field(description="The policy's reference, POL- and six digits.")]
@@ -99,22 +114,6 @@ PolicyRef = Annotated[str, Field(description="The policy's reference, POL- and s
 
 class NotAuthorised(ToolError):
     """This system will not act on the call; the caller reads why."""
-
-
-async def asserted(
-    operation: str, arguments: dict[str, Any], meta: Mapping[str, object]
-) -> str | None:
-    """The session the agent asserts, as the AgentTwin world believes it.
-
-    The harness's MCP client sends `{customer_id}`; the AOAS session field is
-    `policyholder_id` (FINDINGS F-5). Either is read. Only for a local run: a
-    deployment verifies a token instead (Tier 4)."""
-    del operation, arguments
-    session = meta.get(SESSION_META)
-    if not isinstance(session, dict):
-        return None
-    holder = session.get("policyholder_id") or session.get("customer_id")
-    return str(holder) if holder else None
 
 
 def _meta(ctx: Context | None) -> dict[str, object]:
@@ -128,6 +127,25 @@ def _meta(ctx: Context | None) -> dict[str, object]:
     if isinstance(meta, dict):
         return meta
     return dict(getattr(meta, "model_extra", None) or {})
+
+
+def _bearer(ctx: Context | None, meta: Mapping[str, object]) -> str | None:
+    """The token the call carried: its HTTP request's `Authorization` header,
+    or, with no HTTP request (a client in this process), the session's token.
+    Over HTTP the body is never read for one."""
+    try:
+        request = ctx.request_context.request if ctx is not None else None
+    except (AttributeError, ValueError):
+        request = None
+    if request is not None:
+        header = str(request.headers.get("authorization", ""))
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            return None
+        return token.strip()
+    session = meta.get(SESSION_META)
+    token = session.get("token") if isinstance(session, dict) else None
+    return token if isinstance(token, str) and token else None
 
 
 def _key(meta: Mapping[str, object]) -> str | None:
@@ -177,38 +195,76 @@ def covers(
     return f"approval {approval.id} does not cover this payout: {'; '.join(failed)}"
 
 
+@dataclass(frozen=True)
+class _Gate:
+    """Who is asking, and whether money may move: this system's checks."""
+
+    store: Store
+    authorise: Authorise
+    approvals: ApprovalRecordReader | None
+    clock: Callable[[], float]
+
+    async def record(self, meta: Mapping[str, object]) -> ApprovalRecord | None:
+        named = meta.get(APPROVAL_META)
+        if self.approvals is None or not isinstance(named, str):
+            return None
+        return await self.approvals.approval(named)
+
+    async def holder(
+        self, operation: str, arguments: dict[str, Any], ctx: Context | None
+    ) -> str | None:
+        meta = _meta(ctx)
+        call = Call(operation, SCOPES.get(operation, READ_SCOPE), _bearer(ctx, meta), meta)
+        try:
+            caller = await self.authorise(call)
+        except CallRefused as exc:
+            raise NotAuthorised(f"{operation} refused: {exc}") from None
+        if caller.holder is not None or not _workflow(caller):
+            return caller.holder
+        return _on_approval(await self.record(meta), operation, arguments)
+
+    async def payable(self, claim_id: str, who: str, ctx: Context | None) -> None:
+        """The far end's own check on money moving (AHC-0057)."""
+        claim = await self.store.get_claim(who, claim_id)
+        if not claim.get("found"):
+            return  # answered as unknown by the store, never as refused
+        meta = _meta(ctx)
+        approval = await self.record(meta)
+        why = covers(approval, holder=who, claim=claim, key=_key(meta), now=self.clock())
+        if why is not None:
+            raise NotAuthorised(why)
+
+
 def build(
     store: Store,
     *,
-    authorise: Authorise = asserted,
+    authorise: Authorise,
     approvals: ApprovalRecordReader | None = None,
     clock: Callable[[], float] = time.time,
 ) -> MCPServer:
     """The store, as an MCP server that decides for itself whose rows these are."""
     server = MCPServer("claims_system")
-
-    async def holder(operation: str, arguments: dict[str, Any], ctx: Context | None) -> str | None:
-        return await authorise(operation, arguments, _meta(ctx))
-
-    async def payable(claim_id: str, who: str, ctx: Context | None) -> None:
-        """The far end's own check on money moving (AHC-0057)."""
-        claim = await store.get_claim(who, claim_id)
-        if not claim.get("found"):
-            return  # answered as unknown by the store, never as refused
-        meta = _meta(ctx)
-        approval_id = meta.get(APPROVAL_META)
-        loaded = (
-            await approvals.approval(approval_id)
-            if approvals is not None and isinstance(approval_id, str)
-            else None
-        )
-        why = covers(loaded, holder=who, claim=claim, key=_key(meta), now=clock())
-        if why is not None:
-            raise NotAuthorised(why)
-
-    _reads(server, store, holder)
-    _writes(server, store, holder, payable)
+    gate = _Gate(store, authorise, approvals, clock)
+    _reads(server, store, gate.holder)
+    _writes(server, store, gate.holder, gate.payable)
     return server
+
+
+def _workflow(caller: Caller) -> bool:
+    """The payout workflow's own login: no holder, and `payouts:write`."""
+    return caller.holder is None and WORKFLOW_SCOPE in caller.scopes
+
+
+def _on_approval(
+    approval: ApprovalRecord | None, operation: str, arguments: dict[str, Any]
+) -> str | None:
+    """Whose claim the workflow may touch: the named approval's policyholder,
+    for the one claim that approval is about, and only to read it or pay it."""
+    if approval is None or operation not in ("get_claim", "issue_payout"):
+        return None
+    if approval.args.get("claim_id") != arguments.get("id"):
+        return None
+    return approval.requested_for
 
 
 Holder = Callable[[str, dict[str, Any], Context | None], Awaitable[str | None]]
@@ -289,11 +345,11 @@ __all__ = [
     "AUTOMATIC_APPROVER",
     "AUTOMATIC_LIMIT",
     "IDEMPOTENCY_META",
+    "READ_SCOPE",
     "SCOPES",
     "SESSION_META",
-    "Authorise",
+    "WORKFLOW_SCOPE",
     "NotAuthorised",
-    "asserted",
     "build",
     "covers",
 ]

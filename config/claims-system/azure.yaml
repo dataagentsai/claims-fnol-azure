@@ -1,0 +1,28 @@
+# The claims system on Azure (Tier 4): how it checks its caller (A1).
+#
+# Entra v2 access tokens for the claims system's own app registration
+# (infra/hooks/entra-app.sh: api://claims-system), which the agent gets on
+# behalf of the policyholder (config/azure.yaml: identity.far_end_scope) or, for
+# the payout workflow, as itself (identity.worker_scope, the app role
+# payouts.issue). A v2 token's `aud` is the API's client id, never its api://
+# URI, so the audience is the app id the hook records.
+#
+# Each {env: NAME} is an output of infra/main.bicep set under the same name in
+# the claims container's environment; tests/test_infra.py holds the list.
+apiVersion: harness-overlay/v1
+environment: azure
+profile: ../../harness-profile.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: nothing this overlay reads is a secret (a tenant and an app id); the database URLs reach the container as Key Vault references (infra)
+  authorise:
+    adapter: entra-id
+    tenant: {env: AZURE_TENANT_ID}
+    audience: {env: CLAIMS_SYSTEM_APP_ID}
+    # The policyholder id (F-43): Entra issues no such claim until a directory
+    # extension and a claims mapping put it in the token as `customer_id`.
+    holder_claim: customer_id
+    role_scopes:
+      payouts.issue: [claims:read, payouts:write]

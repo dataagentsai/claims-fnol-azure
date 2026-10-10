@@ -5,6 +5,10 @@ approval records (A3), `CLAIMS_RECORDS_DATABASE_URL` from the environment or
 `.env`. The records URL is meant for a role that may only read
 `agent_state.approvals` (A4); until that role exists it falls back to
 `CLAIMS_DBOS_DATABASE_URL`, and the connection is opened read-only either way.
+
+How it checks its caller is its own overlay's (A1): `config/claims-system/
+<CLAIMS_SYSTEM_ENV>.yaml`, default `local`, composed through the harness's
+registry like the agent's — the `authorise` port and nothing else.
 """
 
 from __future__ import annotations
@@ -18,13 +22,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from agent_harness import adapters
 from agent_harness.contracts.records import ApprovalRecordReader
+from agent_harness.identity.far_end import Authorise
 from psycopg.conninfo import make_conninfo
 
 from claims_system import store as st
 
 ROOT = Path(__file__).resolve().parents[2]
 WORLD = ROOT.parent / "clean-ai-engineering/gates/motor-claims-fnol/worlds/motor-claims-fnol.yaml"
+CONFIG = ROOT / "config" / "claims-system"
+"""This system's overlays: `local.yaml`, `test.yaml`, `azure.yaml`."""
 
 
 def env(name: str, default: str | None = None) -> str:
@@ -40,6 +48,27 @@ def env(name: str, default: str | None = None) -> str:
     if default is None:
         raise SystemExit(f"{name} is not set (environment or .env)")
     return default
+
+
+def overlay(name: str | None = None) -> Path:
+    """The overlay `CLAIMS_SYSTEM_ENV` names (default `local`), or a refusal listing them."""
+    chosen = name or env("CLAIMS_SYSTEM_ENV", "local")
+    path = CONFIG / f"{chosen}.yaml"
+    if not path.is_file():
+        known = ", ".join(sorted(p.stem for p in CONFIG.glob("*.yaml")))
+        raise SystemExit(f"CLAIMS_SYSTEM_ENV={chosen!r}: no {path.name}; overlays: {known}")
+    return path
+
+
+@asynccontextmanager
+async def authorisation(
+    planned: adapters.Plan, *, hooks: dict[str, Any] | None = None
+) -> AsyncIterator[Authorise]:
+    """The `authorise` port the overlay binds, built through the registry;
+    `hooks` are the adapter's (`keys`, in a test)."""
+    given = {"authorise": hooks} if hooks else None
+    async with adapters.compose(planned, hooks=given, ports=("secrets", "authorise")) as built:
+        yield built["authorise"]
 
 
 @asynccontextmanager
@@ -76,13 +105,21 @@ def _serve(port: int, host: str) -> None:
 
     url = env("CLAIMS_DATABASE_URL")
     records_url = env("CLAIMS_RECORDS_DATABASE_URL", env("CLAIMS_DBOS_DATABASE_URL", ""))
+    planned = adapters.plan(overlay())
 
     async def run() -> None:
-        async with st.Store.open(url) as store, _records(records_url) as approvals:
-            mcp = server.build(store, approvals=approvals)
+        async with (
+            st.Store.open(url) as store,
+            _records(records_url) as approvals,
+            authorisation(planned) as authorise,
+        ):
+            mcp = server.build(store, authorise=authorise, approvals=approvals)
             app = mcp.streamable_http_app(host=host)
             config = uvicorn.Config(app, host=host, port=port, log_level="warning")
-            print(f"  claims system on http://{host}:{port}/mcp")
+            print(
+                f"  claims system on http://{host}:{port}/mcp, callers checked by "
+                f"{planned.adapter('authorise')} ({planned.environment})"
+            )
             await uvicorn.Server(config).serve()
 
     asyncio.run(run())

@@ -15,6 +15,7 @@ from typing import Any
 import psycopg
 import pytest
 import yaml
+from agent_harness import adapters
 from agent_harness.contracts import Approval, ApprovalState
 from agent_harness.contracts.records import ApprovalRecord, approval_record
 from agent_harness.state.postgres import pool
@@ -27,7 +28,7 @@ from claims_fnol.binding import SCOPES as AGENT_SCOPES
 from claims_fnol_app.compose import migrate_agent_state
 from claims_system import server as srv
 from claims_system import store as st
-from claims_system.__main__ import approval_records, world_records
+from claims_system.__main__ import approval_records, authorisation, overlay, world_records
 
 NOBODY = None
 
@@ -44,8 +45,10 @@ async def claims(
         held = InMemoryRecords()
         for record in (approvals or {}).values():
             await held.put_approval(record)
-        async with st.Store.open(url) as store:
-            server = srv.build(store, approvals=held, clock=lambda: now or time.time())
+        planned = adapters.plan(overlay("test"))  # `asserted`: these rows are about rows
+        async with st.Store.open(url) as store, authorisation(planned) as authorise:
+            clock = lambda: now or time.time()  # noqa: E731
+            server = srv.build(store, authorise=authorise, approvals=held, clock=clock)
             async with Client(server) as client:
                 yield client, url
 
