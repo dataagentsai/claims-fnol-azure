@@ -45,6 +45,15 @@ if [[ -n "$vault" ]]; then
 fi
 azd env set GROQ_KEY_IN_VAULT "$groq_in_vault" >/dev/null
 
+# The agent app's client secret (A1), likewise: real once the Entra hook wrote it.
+entra_in_vault=false
+if [[ -n "$vault" ]]; then
+  tag="$(az keyvault secret show --vault-name "$vault" --name agent-obo-client-secret \
+           --query 'tags.placeholder' -o tsv 2>/dev/null || echo missing)"
+  [[ "$tag" == "false" ]] && entra_in_vault=true
+fi
+azd env set ENTRA_SECRET_IN_VAULT "$entra_in_vault" >/dev/null
+
 placeholder="mcr.microsoft.com/k8se/quickstart:latest"
 keep AGENT_IMAGE "$placeholder"
 keep CLAIMS_SYSTEM_IMAGE "$placeholder"

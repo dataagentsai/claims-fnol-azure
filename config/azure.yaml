@@ -33,7 +33,18 @@ bindings:
   identity:
     adapter: entra-id
     tenant: {env: AZURE_TENANT_ID}
-    audience: api://claims-fnol
+    # A v2 access token's `aud` is the API's client id, not its api:// URI
+    # (FINDINGS F-55), so the agent's own app id, which the Entra hook records.
+    audience: {env: ENTRA_APP_ID}
+    # A1: the claims system's token on every MCP call — on behalf of the
+    # policyholder (their session in, a token for api://claims-system out), and
+    # for the payout workflow the agent's own app token (its app role
+    # payouts.issue). The agent's app proves itself with a client secret the
+    # Entra hook writes to Key Vault; nothing here is a value.
+    client_id: {env: ENTRA_APP_ID}
+    client_secret: {key_vault: agent-obo-client-secret}
+    far_end_scope: api://claims-system/.default
+    worker_scope: api://claims-system/.default
     # The app registration's app role (infra/hooks/entra-app.sh) and what it
     # grants at the desk: the handler reads and closes escalations and decides
     # approvals (F-30). A role is a job; the desk checks scopes.

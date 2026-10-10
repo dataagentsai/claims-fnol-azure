@@ -39,6 +39,9 @@ param ownerPrincipalId string = ''
 @description('True once the real Groq key is in the vault; then the placeholder is not written.')
 param groqKeyInVault bool = false
 
+@description('True once the agent app\'s client secret is in the vault; then its placeholder is not written.')
+param entraSecretInVault bool = false
+
 @secure()
 @description('The PostgreSQL administrator password (azd secretOrRandomPassword), kept here so azd reads the same one back next time.')
 param postgresAdminPassword string
@@ -97,6 +100,21 @@ resource groqPlaceholder 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!g
   }
   properties: {
     value: 'set-by-the-postprovision-hook'
+  }
+}
+
+// The agent app's client secret for the on-behalf-of and client-credentials
+// grants (A1, config/azure.yaml identity.client_secret). infra/hooks/entra-app.sh
+// makes it at the app registration and writes it here, never to a file; until
+// then a placeholder, as for the Groq key.
+resource entraSecretPlaceholder 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!entraSecretInVault) {
+  parent: vault
+  name: 'agent-obo-client-secret'
+  tags: {
+    placeholder: 'true'
+  }
+  properties: {
+    value: 'set-by-the-entra-app-hook'
   }
 }
 

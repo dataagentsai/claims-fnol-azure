@@ -29,6 +29,9 @@ bindings:
     why: test users signed in the test's process
     url: http://local-issuer.test/realms/claims
     audience: claims-fnol
+    far_end_audience: claims-system
+    party: claims-fnol
+    worker_scopes: [claims:read, payouts:write]
   tool_runtime:
     adapter: mcp-client
   approval:

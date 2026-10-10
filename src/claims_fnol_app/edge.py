@@ -7,6 +7,9 @@ Around it, three routes of this app's own:
 
     /signin       local test sign-in, where the identity adapter can sign
                   (`local-dev`); no other adapter can, so it exists nowhere else
+    /.well-known/jwks.json
+                  that signer's public keys, so the claims system can verify
+                  the tokens it mints for it (A1); only where there is a signer
     /opening      what a signed-in policyholder is shown first: their open claims
                   and policies, with no model call (P-OPEN)
     /dev/usage    model calls and tokens so far, where the overlay asks for it
@@ -19,6 +22,8 @@ with one issuer's shape (F-30).
 """
 
 from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
 
 from agent_harness import identity as ident
 from agent_harness import serve
@@ -56,6 +61,15 @@ def opening(agent: ep.Agent, sessions: Sessions) -> Route:
     return Route("/opening", show)
 
 
+def published(jwks: dict[str, object]) -> Callable[[Request], Awaitable[Response]]:
+    """The local issuer's public keys: what a far end verifies its tokens with."""
+
+    async def keys(_: Request) -> Response:
+        return JSONResponse(jwks)
+
+    return keys
+
+
 def usage(counted: Counted) -> Route:
     async def totals(_: Request) -> Response:
         return JSONResponse(counted.totals())
@@ -85,6 +99,7 @@ def build(
         routes += [
             Route("/signin", signin.signin_page, methods=["GET"]),
             Route("/signin", signin.signin, methods=["POST"]),
+            Route("/.well-known/jwks.json", published(sessions.signer.jwks), methods=["GET"]),
         ]
     if usage_route:
         routes.append(usage(counted))

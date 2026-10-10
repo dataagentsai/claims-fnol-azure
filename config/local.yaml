@@ -34,6 +34,14 @@ bindings:
     why: test users signed on this Mac (/signin); Entra ID is Tier 4
     url: http://local-issuer.test/realms/claims
     audience: claims-fnol
+    # A1: every MCP call carries a token the local issuer mints for the claims
+    # system's audience (5 minutes, the policyholder and the session's scopes);
+    # the payout workflow calls under its own login, no policyholder in it. The
+    # claims system verifies both with the keys the app publishes at
+    # /.well-known/jwks.json (config/claims-system/local.yaml).
+    far_end_audience: claims-system
+    party: claims-fnol
+    worker_scopes: [claims:read, payouts:write]
   tool_runtime:
     adapter: mcp-client
     url: {env: CLAIMS_MCP_URL, default: "http://127.0.0.1:9050/mcp"}

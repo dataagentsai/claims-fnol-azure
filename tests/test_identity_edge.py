@@ -39,13 +39,18 @@ from claims_fnol_app.usage import Counted
 TENANT = "00000000-0000-0000-0000-0000000000fe"
 ENTRA_KEY = LocalIssuer()
 """Signs the Entra-shaped sessions; its public half is the `keys` hook."""
-REFERENCES = {"AZURE_TENANT_ID": TENANT}
+REFERENCES = {
+    "AZURE_TENANT_ID": TENANT,
+    "ENTRA_APP_ID": "11111111-0000-0000-0000-00000000a9e7",
+    "agent-obo-client-secret": "test-secret",
+}
 
 
 def _resolved(value: Any) -> Any:
-    """An overlay's `{env: NAME}` replaced by this test's value (no secrets port)."""
+    """An overlay's `{env: NAME}` or `{key_vault: name}` replaced by this test's
+    value (no secrets port)."""
     if adapters.is_reference(value):
-        return REFERENCES[value["env"]]
+        return REFERENCES[value.get("env") or value["key_vault"]]
     return value
 
 

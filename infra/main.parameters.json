@@ -9,6 +9,9 @@
     "budgetContactEmail": { "value": "${BUDGET_CONTACT_EMAIL}" },
     "ownerIpAddress": { "value": "${OWNER_IP_ADDRESS}" },
     "groqKeyInVault": { "value": "${GROQ_KEY_IN_VAULT=false}" },
+    "entraSecretInVault": { "value": "${ENTRA_SECRET_IN_VAULT=false}" },
+    "entraAppId": { "value": "${ENTRA_APP_ID=}" },
+    "claimsSystemAppId": { "value": "${CLAIMS_SYSTEM_APP_ID=}" },
     "postgresAdminPassword": { "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} postgres-admin-password)" },
     "agentImage": { "value": "${AGENT_IMAGE=mcr.microsoft.com/k8se/quickstart:latest}" },
     "claimsSystemImage": { "value": "${CLAIMS_SYSTEM_IMAGE=mcr.microsoft.com/k8se/quickstart:latest}" }

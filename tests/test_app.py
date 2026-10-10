@@ -20,6 +20,7 @@ import httpx2
 import psycopg
 import pytest
 from agent_harness import adapters
+from agent_harness import identity as ident
 from agent_harness.identity.local import LocalIssuer
 from pg import throwaway
 
@@ -28,7 +29,8 @@ from claims_fnol_app import signin
 from claims_fnol_app.compose import compose, hooks, overlay
 from claims_system import server as srv
 from claims_system import store as st
-from claims_system.__main__ import approval_records, world_records
+from claims_system.__main__ import approval_records, authorisation, world_records
+from claims_system.__main__ import overlay as claims_overlay
 
 
 def says(text: str = "", *calls: tuple[str, dict[str, object]]) -> ModelResponse:
@@ -71,18 +73,40 @@ class App:
         return found
 
 
+class AppKeys:
+    """The app's local issuer's keys, for a claims system built before the app
+    is: what `/.well-known/jwks.json` serves the claims system on this Mac."""
+
+    keys: ident.JWKS | None = None
+
+    def key_for(self, token: str) -> Any:
+        if self.keys is None:
+            raise ident.InvalidSession("the app has published no keys yet")
+        return self.keys.key_for(token)
+
+
 @asynccontextmanager
 async def app(script: Iterable[ModelResponse]) -> AsyncIterator[App]:
+    """The app and the claims system as on this Mac: every call carries a token
+    the app's local issuer minted for the claims system, which verifies it with
+    the app's keys (`config/claims-system/local.yaml`, A1)."""
     async with throwaway("claims_app") as claims_url, throwaway("claims_agent") as agent_url:
         await st.migrate(claims_url)
         await st.seed(claims_url, world_records())
-        async with st.Store.open(claims_url) as store, approval_records(agent_url) as records:
-            server = srv.build(store, approvals=records)
+        published = AppKeys()
+        checked = adapters.plan(claims_overlay("local"))
+        async with (
+            st.Store.open(claims_url) as store,
+            approval_records(agent_url) as records,
+            authorisation(checked, hooks={"keys": published}) as authorise,
+        ):
+            server = srv.build(store, authorise=authorise, approvals=records)
             given = hooks(script=script, claims_server=server)
             with pytest.MonkeyPatch.context() as env:
                 env.setenv("CLAIMS_DBOS_DATABASE_URL", agent_url)
                 planned = adapters.plan(overlay("test"))
                 async with compose(planned, given=given) as built:
+                    published.keys = ident.JWKS(built.state.local_issuer.jwks)
                     transport = httpx2.ASGITransport(app=built)
                     async with httpx2.AsyncClient(transport=transport, base_url="http://app") as h:
                         yield App(h, claims_url, built.state.local_issuer)

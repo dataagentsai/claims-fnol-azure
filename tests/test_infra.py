@@ -165,6 +165,24 @@ def test_each_vault_secret_the_overlay_reads_is_written_by_a_module(name: str) -
     assert name in SECRETS_WRITTEN, f"no module writes {name}"
 
 
+CLAIMS_OVERLAY = yaml.safe_load((ROOT / "config" / "claims-system" / "azure.yaml").read_text())
+CLAIMS_ENV = set(re.findall(r"\{ name: '(\w+)', value:", MODULES["claimsSystem"][1]))
+
+
+@pytest.mark.discharges("AHC-0004")
+@pytest.mark.parametrize("name", sorted(references(CLAIMS_OVERLAY, "env")))
+def test_each_name_the_claims_overlay_reads_is_in_the_claims_container(name: str) -> None:
+    """A1: the claims system's own overlay (config/claims-system/azure.yaml)."""
+    assert name in CLAIMS_ENV, f"{name} is not in the claims container's environment"
+    assert name in MAIN_OUTPUTS, f"{name} is not an output of main.bicep (azd's .env)"
+
+
+@pytest.mark.discharges("AHC-0004")
+def test_the_claims_container_runs_its_azure_overlay() -> None:
+    assert "{ name: 'CLAIMS_SYSTEM_ENV', value: 'azure' }" in MODULES["claimsSystem"][1]
+    assert not references(CLAIMS_OVERLAY, "key_vault"), "the claims overlay holds no secret"
+
+
 def test_no_secret_value_or_resource_name_is_written_into_the_overlay() -> None:
     text = (ROOT / "config" / "azure.yaml").read_text()
     assert ".vault.azure.net" not in text and ".azure-api.net" not in text

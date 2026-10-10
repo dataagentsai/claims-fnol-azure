@@ -45,6 +45,15 @@ param ownerIpAddress string = ''
 @description('True once the real Groq key is in Key Vault (the preprovision hook sets GROQ_KEY_IN_VAULT).')
 param groqKeyInVault bool = false
 
+@description('True once the agent app\'s client secret is in Key Vault (the preprovision hook sets ENTRA_SECRET_IN_VAULT).')
+param entraSecretInVault bool = false
+
+@description('The agent\'s Entra app id (ENTRA_APP_ID, recorded by infra/hooks/entra-app.sh): its sessions\' audience and the client id of its on-behalf-of exchange. Empty until the hook has run once.')
+param entraAppId string = ''
+
+@description('The claims system\'s Entra app id (CLAIMS_SYSTEM_APP_ID, recorded by the same hook): the audience it checks every caller\'s token for (A1).')
+param claimsSystemAppId string = ''
+
 @secure()
 @description('PostgreSQL administrator password: azd\'s secretOrRandomPassword (main.parameters.json).')
 param postgresAdminPassword string
@@ -107,6 +116,7 @@ module keyVault 'modules/keyvault.bicep' = {
     ]
     ownerPrincipalId: principalId
     groqKeyInVault: groqKeyInVault
+    entraSecretInVault: entraSecretInVault
     postgresAdminPassword: postgresAdminPassword
   }
 }
@@ -205,6 +215,14 @@ module claimsSystem 'modules/containerapp.bicep' = {
     cpu: '0.25'
     memory: '0.5Gi'
     keyVaultUri: keyVault.outputs.uri
+    // How it checks its caller (A1): config/claims-system/azure.yaml, Entra
+    // tokens for its own app registration. tests/test_infra.py holds this list
+    // to that overlay's {env: NAME} references.
+    env: [
+      { name: 'CLAIMS_SYSTEM_ENV', value: 'azure' }
+      { name: 'AZURE_TENANT_ID', value: tenant().tenantId }
+      { name: 'CLAIMS_SYSTEM_APP_ID', value: claimsSystemAppId }
+    ]
     keyVaultSecrets: [
       { name: 'claims-database-url', secret: 'claims-database-url', variable: 'CLAIMS_DATABASE_URL' }
       // The claims system checks a payout against the agent's own approval
@@ -242,6 +260,7 @@ module agent 'modules/containerapp.bicep' = {
       { name: 'APIM_GROQ_BASE_URL', value: apim.outputs.groqBaseUrl }
       { name: 'CLAIMS_MCP_URL', value: '${claimsSystem.outputs.url}/mcp' }
       { name: 'AZURE_APP_CONFIGURATION_ENDPOINT', value: appConfig.outputs.endpoint }
+      { name: 'ENTRA_APP_ID', value: entraAppId }
     ]
   }
   dependsOn: [postgres]
@@ -254,6 +273,8 @@ output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.uri
 output APIM_GROQ_BASE_URL string = apim.outputs.groqBaseUrl
 output CLAIMS_MCP_URL string = '${claimsSystem.outputs.url}/mcp'
 output AZURE_APP_CONFIGURATION_ENDPOINT string = appConfig.outputs.endpoint
+output ENTRA_APP_ID string = entraAppId
+output CLAIMS_SYSTEM_APP_ID string = claimsSystemAppId
 
 // For the hooks, the README and the portal tour.
 output AZURE_LOCATION string = location
