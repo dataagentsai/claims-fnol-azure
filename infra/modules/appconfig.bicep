@@ -1,20 +1,22 @@
 // WHAT IT IS
 //   Azure App Configuration: settings and feature flags kept outside the image,
-//   changed in the portal without a redeploy. It holds two of this agent's
-//   numbers:
-//     payout_limit_inr     25000  the automatic payout limit (the AOAS's
-//                                 issue_payout.authority; the agent reads it
-//                                 from the spec today, this copy is for the
-//                                 Tier 5 exercise "change the limit without a
-//                                 redeploy")
+//   changed in the portal or with `az appconfig kv set` without a redeploy. It
+//   holds two of this agent's numbers:
+//     payout.automatic_limit_inr  (label dev)  25000  the automatic payout
+//                                 limit. The AOAS's issue_payout.authority is
+//                                 its default and its ceiling; the agent and
+//                                 the claims system both read this one key
+//                                 (Tier 4a A6, FINDINGS F-71) and re-read it
+//                                 every 30 s, so lowering it reaches the next
+//                                 payout (Tier 5's exercise).
 //     online_sample_rate   1.0    the share of turns the online checks judge
-//                                 (evaluators.yaml, position `online`)
+//                                 (evaluators.yaml, position `online`); not
+//                                 read yet (F-77)
 //
 // WHICH CONCERN IT SERVES
-//   Config (stack binding `config: app-configuration`). FINDINGS F-35: the
-//   library has no `config` port yet, so nothing reads these at run time; the
-//   store exists so Tier 5 has somewhere to change them, and the agent's
-//   identity can already read it ("App Configuration Data Reader").
+//   Config (stack binding `config: app-configuration`, the harness's
+//   `app-configuration` adapter). Each app's identity reads it with "App
+//   Configuration Data Reader"; nothing but the owner can write.
 //
 // EXPECTED DEV COST
 //   $0: Free tier, $0.00/day (Azure Retail Prices API, Central India, "Free
@@ -26,13 +28,16 @@ param location string
 param name string
 param tags object = {}
 
-@description('The agent identity\'s principal id: reads settings.')
-param readerPrincipalId string
+@description('The apps\' identities (the agent, the claims system): each reads settings.')
+param readerPrincipalIds array
 
 @description('The owner (AZURE_PRINCIPAL_ID): edits settings in the portal tour. Empty skips it.')
 param ownerPrincipalId string = ''
 
 param payoutLimitInr int = 25000
+
+@description('The label both apps read under (config/azure.yaml, config/claims-system/azure.yaml).')
+param label string = 'dev'
 
 @description('A string, as Bicep has no decimal literals.')
 param onlineSampleRate string = '1.0'
@@ -52,9 +57,10 @@ resource store 'Microsoft.AppConfiguration/configurationStores@2023-03-01' = {
   }
 }
 
+// A key-value's resource name is `<key>$<label>`.
 resource payoutLimit 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = {
   parent: store
-  name: 'payout_limit_inr'
+  name: 'payout.automatic_limit_inr$${label}'
   properties: {
     value: string(payoutLimitInr)
     contentType: 'text/plain'
@@ -70,15 +76,15 @@ resource sampleRate 'Microsoft.AppConfiguration/configurationStores/keyValues@20
   }
 }
 
-resource reader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource readers 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for reader in readerPrincipalIds: {
   scope: store
-  name: guid(store.id, readerPrincipalId, dataReader)
+  name: guid(store.id, reader, dataReader)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', dataReader)
-    principalId: readerPrincipalId
+    principalId: reader
     principalType: 'ServicePrincipal'
   }
-}
+}]
 
 resource owner 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(ownerPrincipalId)) {
   scope: store

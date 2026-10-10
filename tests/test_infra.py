@@ -26,7 +26,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -425,3 +427,73 @@ def test_the_role_hook_never_prints_a_password() -> None:
     for line in DB_ROLES.splitlines():
         if re.match(r"\s*(echo|printf)\b", line):
             assert "PASSWORD" not in line, line
+
+
+# ------------------------------------------------- A6 the payout limit's store
+APPCONFIG = (INFRA / "modules" / "appconfig.bicep").read_text()
+
+
+def overlay_config(path: str) -> dict[str, Any]:
+    loaded: dict[str, Any] = yaml.safe_load((ROOT / path).read_text())["bindings"]["config"]
+    return loaded
+
+
+# (what, how the infra must say it)
+APP_CONFIGURATION: list[tuple[str, Callable[[], bool]]] = [
+    (
+        "the key both apps read exists under the label they read",
+        lambda: (
+            "name: 'payout.automatic_limit_inr$${label}'" in APPCONFIG
+            and "param label string = 'dev'" in APPCONFIG
+        ),
+    ),
+    (
+        "the old key name is gone",
+        lambda: "'payout_limit_inr'" not in APPCONFIG,
+    ),
+    (
+        "the label is the one both overlays name",
+        lambda: (
+            overlay_config("config/azure.yaml")["label"]
+            == overlay_config("config/claims-system/azure.yaml")["label"]
+            == "dev"
+        ),
+    ),
+    (
+        "both identities are given App Configuration Data Reader",
+        lambda: (
+            re.findall(
+                r"identities\.outputs\.(\w+)",
+                MODULES["appConfig"][1].split("readerPrincipalIds:")[1].split("]")[0],
+            )
+            == ["agentPrincipalId", "claimsPrincipalId"]
+            and "var dataReader = '516239f1-63e1-4d78-a4de-a74fb236a071'" in APPCONFIG
+            and "[for reader in readerPrincipalIds:" in APPCONFIG
+            and "principalId: reader" in APPCONFIG
+        ),
+    ),
+    (
+        "no app identity may write",
+        lambda: (
+            "principalId: ownerPrincipalId" in APPCONFIG
+            and "ownerPrincipalId: principalId" in MODULES["appConfig"][1]
+        ),
+    ),
+    (
+        "both containers are told where the store is",
+        lambda: (
+            "AZURE_APP_CONFIGURATION_ENDPOINT" in AGENT_ENV
+            and "AZURE_APP_CONFIGURATION_ENDPOINT" in CLAIMS_ENV
+        ),
+    ),
+]
+
+
+@pytest.mark.discharges("P-PAYOUT", "AHC-0057", "AHC-0040")
+@pytest.mark.parametrize(
+    ("what", "holds"), APP_CONFIGURATION, ids=[a[0] for a in APP_CONFIGURATION]
+)
+def test_the_payout_limit_is_one_labelled_key_both_apps_may_only_read(
+    what: str, holds: Callable[[], bool]
+) -> None:
+    assert holds(), what

@@ -216,6 +216,32 @@ az containerapp ingress traffic set -g $RG -n $APP \
   --revision-weight latest=100                                  # promote, or point back to roll back
 ```
 
+### Change the payout limit without a redeploy (not run yet; Tier 5 exercise)
+
+The automatic payout limit (₹25,000, the AOAS's `issue_payout.authority`) is
+the App Configuration key `payout.automatic_limit_inr` under the label `dev`
+(Tier 4a A6). The agent and the claims system both read that one key with
+their own identities (App Configuration Data Reader), once per payout, and
+re-read it every 30 seconds, so a change reaches the next payout with no
+redeploy and no restart.
+
+```bash
+STORE=$(azd env get-value AZURE_APP_CONFIGURATION_ENDPOINT | sed -E 's#https://([^.]+)\..*#\1#')
+az appconfig kv set --name $STORE --key payout.automatic_limit_inr --label dev --value 20000
+az appconfig kv show --name $STORE --key payout.automatic_limit_inr --label dev
+```
+
+That is `az appconfig kv set --name <store> --key payout.automatic_limit_inr --label dev --value 20000`.
+Within 30 seconds a ₹25,000 payout (CLM-010003) waits for a claims handler
+instead of being paid, and its `agent.approval.assess` span records
+`agent.payout.automatic_limit_inr = 20000`. Set it back to 25000, or delete
+the key, to restore the AOAS's limit. A value above 25000, or one that is not
+a number, is refused: both apps keep the last good value and log why, because
+a limit above the AOAS's is a spec change, not a setting.
+
+On this Mac the same key is `PAYOUT_AUTOMATIC_LIMIT_INR` in `.env`, re-read
+every 5 seconds (`config/local.yaml`).
+
 ### Remove it
 
     azd down --purge

@@ -181,7 +181,11 @@ module appConfig 'modules/appconfig.bicep' = {
     location: location
     tags: tags
     name: 'appcs-fnol-${token}'
-    readerPrincipalId: identities.outputs.agentPrincipalId
+    // A6: both apps read the payout limit, each with its own identity.
+    readerPrincipalIds: [
+      identities.outputs.agentPrincipalId
+      identities.outputs.claimsPrincipalId
+    ]
     ownerPrincipalId: principalId
   }
 }
