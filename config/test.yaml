@@ -11,6 +11,11 @@ bindings:
   secrets:
     adapter: environment-settings
     why: a test reads only its own process environment
+  # A6: no value given, so every key reads as its declared default (the
+  # automatic limit is the AOAS's); a test that moves one hands in `values`.
+  config:
+    adapter: static
+    why: a test's values are its own, never the environment's
   telemetry:
     adapter: console
     why: spans stay in memory, where a test can read them

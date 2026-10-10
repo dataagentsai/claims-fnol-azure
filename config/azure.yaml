@@ -17,6 +17,14 @@ bindings:
   secrets:
     adapter: key-vault
     vault_url: {env: AZURE_KEY_VAULT_ENDPOINT}
+  # A6: the automatic payout limit and anything else that changes without a
+  # redeploy, read with the app's managed identity (App Configuration Data
+  # Reader) under the label `dev`, re-read every 30 s. The claims system reads
+  # the same key and label (config/claims-system/azure.yaml).
+  config:
+    adapter: app-configuration
+    endpoint: {env: AZURE_APP_CONFIGURATION_ENDPOINT}
+    label: dev
   telemetry:
     adapter: azure-monitor-otel
     connection_string: {key_vault: appinsights-connection-string}

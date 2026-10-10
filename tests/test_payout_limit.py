@@ -16,6 +16,7 @@ import yaml
 from kit import AOAS
 
 from claims_fnol.approvals.policy import (
+    AUTOMATIC_LIMIT,
     JUDGED,
     Policy,
     judged,
@@ -38,7 +39,11 @@ def aoas_limit() -> Decimal:
 
 @pytest.mark.discharges("P-PAYOUT", "P-APPROVER")
 def test_the_enforced_limit_is_the_aoas_limit() -> None:
-    assert Policy().automatic_limit == aoas_limit() == Decimal("25000")
+    """The config key's default, and its ceiling, are the AOAS's (A6)."""
+    assert AUTOMATIC_LIMIT.default == Policy().automatic_limit() == aoas_limit() == Decimal(25000)
+    assert AUTOMATIC_LIMIT.name == "payout.automatic_limit_inr"
+    with pytest.raises(ValueError, match="refused"):
+        AUTOMATIC_LIMIT.parse(str(aoas_limit() + 1))
 
 
 # [approved amount, needs a claims handler]
@@ -58,7 +63,7 @@ AMOUNTS = [
 @pytest.mark.parametrize(("amount", "needs_a_person"), AMOUNTS, ids=[str(a[0]) for a in AMOUNTS])
 def test_the_limit_decides_who_authorises(amount: object, needs_a_person: bool) -> None:
     claim = {"id": "CLM-010001", "status": "approved", "approved_amount": amount}
-    assert (requires_approval(claim, Policy()) is not None) is needs_a_person
+    assert (requires_approval(claim, Policy().automatic_limit()) is not None) is needs_a_person
 
 
 # [claim status, may a payout be requested]

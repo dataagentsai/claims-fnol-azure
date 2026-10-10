@@ -1,7 +1,7 @@
 """This agent's own spans, declared into the harness's span contract, and its names.
 
-Six spans are opened by this agent's modules rather than the harness's — the
-router, the deterministic answers, the opening, the payout's resume and carry-out,
+Seven spans are opened by this agent's modules rather than the harness's — the
+router, the deterministic answers, the opening, the payout's assessment, resume and carry-out,
 and the promise gate — so they are this agent's to declare.
 """
 
@@ -23,6 +23,10 @@ SPANS: dict[str, SpanSpec] = {
     # system would not say) and how much work in flight. No model span under it.
     "agent.opening": SpanSpec(
         required=frozenset({TENANT, "agent.opening.claims", "agent.opening.in_flight"}),
+    ),
+    # A6: the automatic limit a payout decision used, read once for it.
+    "agent.approval.assess": SpanSpec(
+        required=frozenset({"agent.approval.id", "agent.payout.automatic_limit_inr"})
     ),
     "agent.approval.resume": SpanSpec(required=frozenset({"agent.approval.id"})),
     "agent.approval.carry_out": SpanSpec(required=frozenset({"agent.approval.id"})),

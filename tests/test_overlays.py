@@ -31,6 +31,7 @@ OVERLAYS: list[tuple[str, dict[str, str]]] = [
         "local",
         {
             "secrets": "environment-settings",
+            "config": "environment-settings",
             "telemetry": "console",
             "model": "groq-direct",
             "state": "postgres",
@@ -44,6 +45,7 @@ OVERLAYS: list[tuple[str, dict[str, str]]] = [
         "test",
         {
             "secrets": "environment-settings",
+            "config": "static",
             "telemetry": "console",
             "model": "scripted",
             "state": "postgres",
@@ -57,6 +59,7 @@ OVERLAYS: list[tuple[str, dict[str, str]]] = [
         "azure",
         {
             "secrets": "key-vault",
+            "config": "app-configuration",
             "telemetry": "azure-monitor-otel",
             "model": "apim-ai-gateway",
             "state": "azure-postgresql-flexible",

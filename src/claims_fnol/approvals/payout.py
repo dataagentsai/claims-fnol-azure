@@ -67,6 +67,8 @@ class PayoutRequested(ApprovalRequested):
 REQUEST_PAYOUT = "request_payout"
 CLAIM_LOOKUP = "get_claim"
 POLICY_APPROVER = "policy:automatic-limit"
+LIMIT_ATTRIBUTE = "agent.payout.automatic_limit_inr"
+"""The limit a payout decision used, on its `agent.approval.assess` span (A6)."""
 """Who granted a payout within the limit, so "who let this money move?" has one
 answer for both paths."""
 
@@ -181,7 +183,13 @@ class PayoutWork:
         refused = not_requestable(claim, self.policy)
         if refused is not None:
             return Assessment(args=args, reason=None, failed=refused)
-        reason = requires_approval(claim, self.policy)
+        # One read of the limit per decision (A6, AHC-0003), recorded on the
+        # decision's span: a change in App Configuration applies to the next
+        # payout, and each decision shows which limit it used.
+        limit = self.policy.automatic_limit()
+        attributes = {"agent.approval.id": ask.id, LIMIT_ATTRIBUTE: str(limit)}
+        with tel.span("agent.approval.assess", **attributes):
+            reason = requires_approval(claim, limit)
         return Assessment(
             args=args, reason=reason, approver=POLICY_APPROVER, decided_against=judged(claim)
         )
@@ -265,6 +273,7 @@ async def _claim(
 __all__ = [
     "CLAIM_LOOKUP",
     "DECLINED_REPLY",
+    "LIMIT_ATTRIBUTE",
     "PAYOUT_WAIT_REPLY",
     "POLICY_APPROVER",
     "REQUEST_PAYOUT",

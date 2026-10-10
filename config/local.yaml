@@ -13,6 +13,15 @@ bindings:
     adapter: environment-settings
     why: no Key Vault on a Mac — the environment first, then .env (gitignored)
     dotenv: ../.env
+  # A6: values that may change while the app runs — the automatic payout limit,
+  # `payout.automatic_limit_inr`, read here as PAYOUT_AUTOMATIC_LIMIT_INR. The
+  # .env file is re-read every ttl_s, so a change there reaches the next payout
+  # without a restart; one exported into the process environment cannot.
+  config:
+    adapter: environment-settings
+    why: no App Configuration on a Mac — the environment first, then .env (gitignored)
+    dotenv: ../.env
+    ttl_s: 5
   telemetry:
     adapter: console
     why: traces stay in this process; Application Insights arrives in Tier 4

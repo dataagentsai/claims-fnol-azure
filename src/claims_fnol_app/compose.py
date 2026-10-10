@@ -13,6 +13,11 @@ library's registry (`agent_harness.adapters`):
   Entra ID, Application Insights, Key Vault. It resolves now and runs once
   Tier 3 has made its resources.
 
+The `config` port (A6) is built first, on its own: the payout policy reads the
+automatic limit through it at every decision, and the policy is one of the
+hooks every other adapter is handed. So `compose` builds `secrets` and `config`,
+then the rest; the secrets reader is built twice, which costs nothing.
+
 `CLAIMS_FNOL_ENV` names the overlay file and nothing else: no line here or in
 `edge.py` asks which environment it is, or which vendor an adapter is. What is
 this agent's is handed to the adapters as hooks: its resolved model choice, its
@@ -32,10 +37,11 @@ from typing import Any
 
 import psycopg
 from agent_harness import adapters
+from agent_harness.config.settings import Settings as ConfigPort
 from starlette.applications import Starlette
 
 from claims_fnol import entrypoint as ep
-from claims_fnol.approvals import PayoutWork, Policy
+from claims_fnol.approvals import KEYS, PayoutWork, Policy
 from claims_fnol.config import Settings, resolve
 from claims_fnol.contracts import ModelResponse, ToolClient
 from claims_fnol_app import edge
@@ -67,11 +73,19 @@ async def migrate_agent_state(url: str) -> None:
             await conn.execute(file.read_text().encode())
 
 
+@asynccontextmanager
+async def settings(planned: adapters.Plan) -> AsyncIterator[ConfigPort]:
+    """The config port the overlay binds, with this agent's declared keys."""
+    wired = {"config": {"keys": KEYS}}
+    async with adapters.compose(planned, hooks=wired, ports=("secrets", "config")) as built:
+        yield built["config"]
+
+
 def hooks(
-    *, script: Iterable[ModelResponse] = (), claims_server: Any = None
+    *, settings: ConfigPort, script: Iterable[ModelResponse] = (), claims_server: Any = None
 ) -> dict[str, dict[str, Any]]:
     """What this agent hands the adapters: whichever are chosen read their own."""
-    policy = Policy()
+    policy = Policy(settings=settings)
 
     def payout_work(tools: ToolClient) -> PayoutWork:
         return PayoutWork(tools, acting_for=acting_for, policy=policy)
@@ -86,25 +100,29 @@ def hooks(
 
 @asynccontextmanager
 async def compose(
-    planned: adapters.Plan, *, given: dict[str, dict[str, Any]] | None = None
+    planned: adapters.Plan, *, script: Iterable[ModelResponse] = (), claims_server: Any = None
 ) -> AsyncIterator[Starlette]:
     """The app, on the planned adapters, with every connection closed on exit."""
-    wired = given if given is not None else hooks()
-    config = wired["model"]["choice"]
-    async with adapters.compose(planned, hooks=wired) as built:
-        counted = Counted(built["model"])
-        waits = built["approval"]
-        agent = ep.build(
-            llm=counted,
-            tools=built["tool_runtime"].client,
-            store=built["state"].checkpoints,
-            approvals=waits.approvals,
-            escalations=waits.escalations,
-            deliveries=built["state"].requests,
-            config=config,
-        )
-        usage_route = bool(planned.app.get("usage_route", False))
-        yield edge.build(agent, waits, built["identity"], counted=counted, usage_route=usage_route)
+    rest = tuple(port for port in planned.bound if port != "config")
+    async with settings(planned) as limits:
+        wired = hooks(settings=limits, script=script, claims_server=claims_server)
+        config = wired["model"]["choice"]
+        async with adapters.compose(planned, hooks=wired, ports=rest) as built:
+            counted = Counted(built["model"])
+            waits = built["approval"]
+            agent = ep.build(
+                llm=counted,
+                tools=built["tool_runtime"].client,
+                store=built["state"].checkpoints,
+                approvals=waits.approvals,
+                escalations=waits.escalations,
+                deliveries=built["state"].requests,
+                config=config,
+            )
+            usage_route = bool(planned.app.get("usage_route", False))
+            yield edge.build(
+                agent, waits, built["identity"], counted=counted, usage_route=usage_route
+            )
 
 
-__all__ = ["CONFIG", "compose", "hooks", "migrate_agent_state", "overlay"]
+__all__ = ["CONFIG", "compose", "hooks", "migrate_agent_state", "overlay", "settings"]

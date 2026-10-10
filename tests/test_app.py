@@ -27,7 +27,7 @@ from pg import least_privilege, throwaway
 
 from claims_fnol.contracts import ModelResponse, ToolCall, Usage
 from claims_fnol_app import signin
-from claims_fnol_app.compose import compose, hooks, overlay
+from claims_fnol_app.compose import compose, overlay
 from claims_system import server as srv
 from claims_system import store as st
 from claims_system.__main__ import approval_records, authorisation, world_records
@@ -110,11 +110,10 @@ async def app(script: Iterable[ModelResponse]) -> AsyncIterator[App]:
             authorisation(checked, hooks={"keys": published}) as authorise,
         ):
             server = srv.build(store, authorise=authorise, approvals=records)
-            given = hooks(script=script, claims_server=server)
             with pytest.MonkeyPatch.context() as env:
                 env.setenv("CLAIMS_DBOS_DATABASE_URL", agent_url)
                 planned = adapters.plan(overlay("test"))
-                async with compose(planned, given=given) as built:
+                async with compose(planned, script=script, claims_server=server) as built:
                     published.keys = ident.JWKS(built.state.local_issuer.jwks)
                     transport = httpx2.ASGITransport(app=built)
                     async with httpx2.AsyncClient(transport=transport, base_url="http://app") as h:
