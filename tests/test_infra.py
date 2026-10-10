@@ -249,3 +249,41 @@ def test_each_dockerfile_copies_what_exists(
 def test_no_build_is_sent_the_local_secrets() -> None:
     ignored = (ROOT / ".dockerignore").read_text().split()
     assert {".env", ".venv/", ".azure/"} <= set(ignored)
+
+
+# ------------------------------------------------------------- Tier 4a A7, A8
+@pytest.mark.discharges("AHC-0094")
+@pytest.mark.parametrize(
+    ("what", "pattern", "where"),
+    [
+        ("the agent app can run two revisions (canary)", r"revisionsMode: 'Multiple'", "main"),
+        (
+            "a Multiple app gives its latest revision all traffic",
+            r"latestRevision: true, weight: 100",
+            "app",
+        ),
+        ("the allow-list is a named value", r"name: 'allowed-models'", "apim"),
+        ("main passes the allow-list to APIM", r"allowedModels: allowedModels", "main"),
+        (
+            "the policy refuses any other model with 403",
+            r'"\{\{allowed-models\}\}"\.Split',
+            "policy",
+        ),
+        ("the refusal is a 403", r'code="403" reason="Model not allowed"', "policy"),
+    ],
+    ids=lambda v: v if isinstance(v, str) and " " in v else "",
+)
+def test_canary_revisions_and_the_model_allow_list(what: str, pattern: str, where: str) -> None:
+    text = {
+        "main": MAIN,
+        "app": (INFRA / "modules" / "containerapp.bicep").read_text(),
+        "apim": APIM,
+        "policy": POLICY,
+    }[where]
+    assert re.search(pattern, text), what
+
+
+def test_the_model_check_comes_before_any_paid_call() -> None:
+    inbound = POLICY[POLICY.index("<inbound>") : POLICY.index("</inbound>")]
+    assert inbound.index("allowed-models") < inbound.index("content-safety-endpoint")
+    assert inbound.index("allowed-models") < inbound.index("<rate-limit")

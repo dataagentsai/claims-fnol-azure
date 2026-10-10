@@ -7,6 +7,22 @@
 <policies>
   <inbound>
     <base />
+    <!-- Tier 4a A8: only an allowed model gets through. Checked first, so a refused
+         request costs no Content Safety call and no tokens. The agent checks the
+         same list (approved_models); this is the second wall, at the door. -->
+    <set-variable name="model" value="@{
+        var body = context.Request.Body.As<JObject>(preserveContent: true);
+        return body == null ? "" : ((string)body["model"] ?? "");
+    }" />
+    <choose>
+      <when condition="@(!"{{allowed-models}}".Split(',').Select(m => m.Trim()).Contains((string)context.Variables["model"]))">
+        <return-response>
+          <set-status code="403" reason="Model not allowed" />
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-body>@(new JObject(new JProperty("error", new JObject(new JProperty("code", "model_not_allowed"), new JProperty("message", "This agent may not use model '" + (string)context.Variables["model"] + "'.")))).ToString())</set-body>
+        </return-response>
+      </when>
+    </choose>
     <!-- Request rate per subscription key (the agent's): 30 calls a minute. -->
     <rate-limit calls="30" renewal-period="60" remaining-calls-header-name="x-ratelimit-remaining" />
     <!-- Token counts per call into Application Insights (customMetrics). -->

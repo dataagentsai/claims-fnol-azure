@@ -91,6 +91,9 @@ param contentSafetyThreshold int = 4
 
 param groqBaseUrl string = 'https://api.groq.com/openai/v1'
 
+@description('Models this API lets through, comma-separated; anything else is refused with 403 before Content Safety or Groq is called (Tier 4a A8).')
+param allowedModels string
+
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
 }
@@ -148,6 +151,15 @@ resource csThreshold 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = 
   properties: {
     displayName: 'content-safety-threshold'
     value: string(contentSafetyThreshold)
+  }
+}
+
+resource modelAllowList 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = {
+  parent: apim
+  name: 'allowed-models'
+  properties: {
+    displayName: 'allowed-models'
+    value: allowedModels
   }
 }
 

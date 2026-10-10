@@ -64,6 +64,9 @@ param agentImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Image the claims system starts with until `azd deploy` sets the real one.')
 param claimsSystemImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
+@description('Models the agent may ask APIM for, comma-separated (Tier 4a A8). The pin in harness-profile.yaml; the agent checks the same list (approved_models), so a wrong model is stopped twice.')
+param allowedModels string = 'openai/gpt-oss-120b'
+
 var resourceGroupName = 'rg-claims-fnol-dev'
 var token = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
@@ -184,6 +187,7 @@ module apim 'modules/apim.bicep' = {
     keyVaultName: keyVault.outputs.name
     appInsightsName: monitoring.outputs.appInsightsName
     contentSafetyEndpoint: contentSafety.outputs.endpoint
+    allowedModels: allowedModels
   }
 }
 
@@ -248,6 +252,7 @@ module agent 'modules/containerapp.bicep' = {
     image: agentImage
     targetPort: agentPort
     external: true
+    revisionsMode: 'Multiple' // the canary exercise splits the agent's traffic; the claims system stays Single
     cpu: '0.5'
     memory: '1Gi'
     keyVaultUri: keyVault.outputs.uri

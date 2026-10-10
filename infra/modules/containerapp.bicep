@@ -50,6 +50,10 @@ param image string
 param targetPort int
 param external bool
 
+@description('Single for a steady app; Multiple lets two revisions take traffic at once, for a canary (Tier 4a A7). New revisions start with no traffic in Multiple mode, so the latest is given 100% until someone splits it.')
+@allowed(['Single', 'Multiple'])
+param revisionsMode string = 'Single'
+
 @description('vCPU, as a string (Bicep has no decimal literals): 0.25, 0.5, ...')
 param cpu string = '0.25'
 param memory string = '0.5Gi'
@@ -79,12 +83,15 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: environmentId
     workloadProfileName: 'Consumption'
     configuration: {
-      activeRevisionsMode: 'Single'
+      activeRevisionsMode: revisionsMode
       ingress: {
         external: external
         targetPort: targetPort
         transport: 'auto'
         allowInsecure: false
+        traffic: revisionsMode == 'Multiple' ? [
+          { latestRevision: true, weight: 100 }
+        ] : null
       }
       secrets: [
         for s in keyVaultSecrets: {

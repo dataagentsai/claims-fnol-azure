@@ -178,6 +178,21 @@ for a whole month PostgreSQL alone is about $22, more than twice the budget
 
 Azure starts a stopped server again by itself after 7 days.
 
+### Roll a canary (not run yet; Tier 5 exercise)
+
+The agent app runs in **Multiple** revision mode (Tier 4a A7): a new revision
+starts with no traffic until you give it some. The claims system stays Single.
+
+```bash
+RG=rg-claims-fnol-dev
+APP=$(az containerapp list -g $RG --query "[?contains(name,'agent')].name" -o tsv)
+az containerapp revision list -g $RG -n $APP -o table          # see both revisions
+az containerapp ingress traffic set -g $RG -n $APP \
+  --revision-weight <old-revision>=95 <new-revision>=5          # 5% to the canary
+az containerapp ingress traffic set -g $RG -n $APP \
+  --revision-weight latest=100                                  # promote, or point back to roll back
+```
+
 ### Remove it
 
     azd down --purge
