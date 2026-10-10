@@ -72,7 +72,10 @@ jobs:
     env:
       # tests/pg.py: the server, no database in the URL, a role that may create
       # databases and roles. Nothing else is read from .env (there is none here).
-      CLAIMS_TEST_SERVER_URL: postgresql://postgres:postgres@localhost:5432
+      # An IP, not `localhost`: psycopg resolves a host name on the event loop's
+      # default executor, which DBOS has shut down by the time the role
+      # teardown connects (FINDINGS F-103); an address needs no lookup.
+      CLAIMS_TEST_SERVER_URL: postgresql://postgres:postgres@127.0.0.1:5432
       # The scripted model only: no test calls Groq, so no key is given.
       UV_PYTHON: "3.13"
 

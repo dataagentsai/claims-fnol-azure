@@ -1,0 +1,164 @@
+# Deploy (Tier 4a A10): `azd provision` then `azd deploy` to the dev
+# environment, with the images CI pushed for one commit.
+#
+# Runs by hand (Actions -> Deploy -> Run workflow, or
+# `gh workflow run deploy.yml`), or after CI on main once the repository
+# variable DEPLOY_AFTER_CI is "true". Either way only for a commit whose CI run
+# on a push succeeded: that run passed the gates and pushed the images.
+#
+# Off until the owner sets it up: the `ready` job checks the three secrets and
+# the variables and, if any is missing, says so and stops without failing.
+# Setup, once: scripts/ci/setup-federated-credential.sh (README, "CI and deploy").
+#
+# Sign-in is OIDC (federated credentials): GitHub's token for this job is
+# exchanged for an Entra token. No client secret exists anywhere.
+#
+# The hooks in azure.yaml are the Mac's: they ask questions and make the Entra
+# app registrations, which needs Microsoft Graph permissions this identity is
+# deliberately not given. So the runner's copy of azure.yaml loses its `hooks`
+# block, and the workflow runs the parts a runner should, itself:
+#   preprovision.sh   as is (non-interactive once deploy-env.sh set its answers)
+#   the Groq key      must already be in the vault (checked; never asked here)
+#   entra-app.sh      not run: registrations change from the Mac
+#   db-roles.sh       as is, through a firewall rule for this runner only,
+#                     removed again under always() (FINDINGS F-70, F-102)
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to deploy (full SHA); empty means the head of the branch run from
+        required: false
+        default: ""
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  ready:
+    name: Ready to deploy?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the setup and the commit's CI
+        id: check
+        run: scripts/ci/deploy-ready.sh
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_SHA: ${{ github.event.inputs.sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          DEPLOY_AFTER_CI: ${{ vars.DEPLOY_AFTER_CI }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME }}
+          ENTRA_APP_ID: ${{ vars.ENTRA_APP_ID }}
+          CLAIMS_SYSTEM_APP_ID: ${{ vars.CLAIMS_SYSTEM_APP_ID }}
+          BUDGET_CONTACT_EMAIL: ${{ vars.BUDGET_CONTACT_EMAIL }}
+          GH_TOKEN: ${{ github.token }}
+
+  deploy:
+    name: Provision and deploy (dev)
+    needs: ready
+    if: needs.ready.outputs.ready == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # The federated credential's subject for this job is
+    # repo:dataagentsai/claims-fnol-azure:environment:dev.
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME || 'dev' }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'centralindia' }}
+      AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME }}
+      ENTRA_APP_ID: ${{ vars.ENTRA_APP_ID }}
+      CLAIMS_SYSTEM_APP_ID: ${{ vars.CLAIMS_SYSTEM_APP_ID }}
+      BUDGET_CONTACT_EMAIL: ${{ vars.BUDGET_CONTACT_EMAIL }}
+      OWNER_IP_ADDRESS: ${{ vars.OWNER_IP_ADDRESS }}
+      IMAGE_TAG: ${{ needs.ready.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.ready.outputs.sha }}
+
+      - name: Azure sign-in (OIDC, no secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: azd sign-in (the same federated credential)
+        run: |
+          azd auth login --client-id "$AZURE_CLIENT_ID" --tenant-id "$AZURE_TENANT_ID" \
+            --federated-credential-provider github
+
+      - name: The azd environment
+        run: scripts/ci/deploy-env.sh
+
+      - name: Preflight (vault readable; real secrets in it)
+        run: scripts/ci/deploy-preflight.sh before
+
+      - name: The runner's azure.yaml without the Mac's hooks
+        run: |
+          yq -i 'del(.hooks)' azure.yaml
+          ! grep -q '^hooks:' azure.yaml
+
+      - name: Preprovision (the repository's hook, unchanged)
+        run: infra/hooks/preprovision.sh
+
+      - name: Preflight (provision keeps the real secrets)
+        run: scripts/ci/deploy-preflight.sh flags
+
+      - name: azd provision
+        run: azd provision --no-prompt
+
+      - name: Admit this runner to PostgreSQL
+        id: firewall
+        run: scripts/ci/db-firewall.sh open
+
+      - name: Database roles (infra/hooks/db-roles.sh, as the Mac runs it)
+        run: |
+          set -a
+          eval "$(azd env get-values)"
+          set +a
+          OWNER_IP_ADDRESS="$RUNNER_IP" infra/hooks/db-roles.sh
+        env:
+          RUNNER_IP: ${{ steps.firewall.outputs.ip }}
+
+      - name: Remove this runner from PostgreSQL's firewall
+        if: always() && steps.firewall.conclusion != 'skipped'
+        run: scripts/ci/db-firewall.sh close
+
+      - name: azd deploy
+        run: azd deploy --no-prompt
+
+      - name: Say where it is
+        run: |
+          echo "Deployed ${IMAGE_TAG}: $(azd env get-value AGENT_URL)" >> "$GITHUB_STEP_SUMMARY"
