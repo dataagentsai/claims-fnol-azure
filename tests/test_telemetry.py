@@ -69,6 +69,8 @@ PERSONAL = [
     ("licence KA0120231234567", "KA0120231234567"),
     ("call me on 9845031207", "9845031207"),
     ("rohan.iyer@example.test", "rohan.iyer@example.test"),
+    ("my aadhaar is 2345 6789 0124", "2345 6789 0124"),
+    ("PAN ABCPE1234F", "ABCPE1234F"),
 ]
 
 
@@ -83,3 +85,25 @@ async def test_personal_data_is_redacted_before_it_leaves_the_process(
         await built.handle(f"hello, {typed}", identity=me())
     exported = " ".join(str(dict(s.attributes or {})) for s in spans_of(exporter))  # type: ignore[attr-defined]
     assert secret not in exported
+
+
+# A12: [what was typed, exactly what is exported] once this agent's patterns are
+# registered after the harness's. 234567890124 carries a correct Aadhaar check
+# digit; 234567890125 does not, so it is this agent's [account], never [aadhaar].
+EXPORTED = [
+    ("aadhaar 2345 6789 0124", "aadhaar [aadhaar]"),
+    ("aadhaar 234567890124", "aadhaar [aadhaar]"),
+    ("PAN abcpe1234f", "PAN [pan]"),
+    ("ref 234567890125", "ref [account]"),
+    ("claim CLM-010003", "claim CLM-010003"),
+    ("policy POL-010004", "policy POL-010004"),
+    ("a payout of ₹25,000", "a payout of ₹25,000"),
+]
+
+
+@pytest.mark.discharges("AHC-0019")
+@pytest.mark.parametrize(("typed", "exported"), EXPORTED, ids=[e[0] for e in EXPORTED])
+def test_aadhaar_and_pan_are_masked_and_references_and_amounts_are_not(
+    typed: str, exported: str
+) -> None:
+    assert redact(typed) == exported

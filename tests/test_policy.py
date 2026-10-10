@@ -191,12 +191,18 @@ PII = [
     ("account number", "Paid to account 50100234567890.", True),
     ("licence number", "Your licence KA0120231234567 is on file.", True),
     ("last four only", "Paid to the account ending 4101.", False),
+    ("aadhaar in fours", "Your Aadhaar 2345 6789 0124 is on file.", True),
+    ("aadhaar whole", "Aadhaar 234567890124 noted.", True),
+    ("pan", "Your PAN ABCPE1234F is on file.", True),
+    ("claim reference", "CLM-010003 is under assessment.", False),
+    ("policy number", "Policy POL-010004 is active.", False),
+    ("amount", "A payout of ₹25,000 was requested.", False),
 ]
 
 
 @pytest.mark.discharges("AHC-0094")
 @pytest.mark.parametrize(("why", "reply", "blocked"), PII, ids=[p[0] for p in PII])
-def test_account_and_licence_numbers_are_never_read_back(
+def test_account_licence_aadhaar_and_pan_numbers_are_never_read_back(
     why: str, reply: str, blocked: bool
 ) -> None:
     assert no_pii_echo(said(reply)).blocked is blocked

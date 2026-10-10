@@ -44,14 +44,15 @@ REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 """AOAS `personal_data_in_conversation`: driving licence and bank account numbers
 typed into the chat, replaced before anything is exported (AHC-0019). The
-harness's own patterns (cards, emails, phones, secrets) run first.
+harness's own patterns (Aadhaar, PAN, cards, emails, phones, secrets) run first,
+so a 12-digit number whose Aadhaar check digit holds is `[aadhaar]` and any
+other is `[account]`.
 
-The harness offers no way to declare these: its patterns are a private module
-tuple, so they are extended here by rebinding it (FINDINGS F-10)."""
+Registered with the harness (`redaction.register`, A12); until A12 they were
+added by rebinding its private tuple (FINDINGS F-10)."""
 
 telemetry.identify(scope=SCOPE, service=SERVICE)
 declare(SPANS)
-if REDACTIONS[0] not in redaction._REDACTIONS:
-    redaction._REDACTIONS = (*redaction._REDACTIONS, *REDACTIONS)
+redaction.register(*REDACTIONS)
 
 __all__ = ["REDACTIONS", "SCOPE", "SERVICE", "SPANS"]

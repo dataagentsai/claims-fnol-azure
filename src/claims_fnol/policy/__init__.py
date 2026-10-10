@@ -29,6 +29,7 @@ from agent_harness.policy import (
     no_superseded_state,
     use_default_rules,
 )
+from agent_harness.telemetry.redaction import PAN, aadhaar_numbers
 
 CLAIM_PATTERNS: dict[str, re.Pattern[str]] = {
     "issue_payout": re.compile(
@@ -150,11 +151,14 @@ LICENCE = re.compile(r"\b[A-Z]{2}[- ]?\d{2}[- ]?\d{4}[- ]?\d{7}\b")
 
 
 def no_pii_echo(ctx: Context) -> Verdict:
-    """Never read a bank account or driving licence number back (AOAS
-    `personal_data_in_conversation`): it puts it in a transcript, a log and a
-    screenshot."""
+    """Never read a bank account, driving licence, Aadhaar or PAN number back
+    (AOAS `personal_data_in_conversation`): it puts it in a transcript, a log and
+    a screenshot. Aadhaar and PAN are the harness's patterns (A12), the same
+    ones redaction masks; a spaced Aadhaar number escaped `DIGITS` before."""
     if DIGITS.search(ctx.text) or LICENCE.search(ctx.text):
         return block("no_pii_echo", "an account- or licence-shaped number appeared in the reply")
+    if aadhaar_numbers(ctx.text) or PAN.search(ctx.text):
+        return block("no_pii_echo", "an Aadhaar or PAN number appeared in the reply")
     return ALLOW
 
 

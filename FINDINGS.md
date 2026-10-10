@@ -20,7 +20,7 @@ was worked around here.
 | F-7 | P-OWN-WORDS requires "a named claim or policy", but policyholders name their car's registration. | Spec (AOAS) | `register_claim` is consented by the report itself when no policy reference is named. |
 | F-8 | P-FNOL's claim reference is lost: the loop's trace keeps only the row each write acted on, not what it created. | Library / AHC | `entrypoint/reference.py` names any created reference the reply left out. |
 | F-9 | The owed-concerns check ignores the harness's own re-read of a row. The resumed-conversation scenario had **passed for the wrong reason** (the model ran past its script and the turn ended in a provider error). | Library | `still_owed` filter in the entrypoint. |
-| F-10 | Redaction patterns cannot be extended by an agent; they are a private tuple. | Library | Rebound at import to add driving-licence and bank-account patterns. |
+| F-10 | Redaction patterns cannot be extended by an agent; they are a private tuple. | Library | Rebound at import to add driving-licence and bank-account patterns. **Fixed** (Tier 4a A12): the harness's `redaction.register`; `claims_fnol.telemetry.spans` registers its two patterns. |
 | F-11 | AgentTwin's projection publishes no `entity` on its tools, so the freshness re-read used `get_policy` on a claim, and `_is_about` accepted "not found" as a fresh read. | AgentTwin and Library | The binding declares each tool's entity from the world. |
 | F-12 | `resilience.COMPENSATIONS` is the clothing agent's table, and nothing calls it. | Library | AHC-0058 accepted as a gap. |
 | F-13 | The AOAS termination list lacked `tool_call_budget_exhausted`, which the harness produces. | Spec | **Fixed**: clean-ai-engineering `d81c39c`. The clothing AOAS has the same gap, still open. |
