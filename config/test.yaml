@@ -21,6 +21,9 @@ bindings:
     adapter: postgres
     why: a throwaway database on the local PostgreSQL service
     url: {env: CLAIMS_DBOS_DATABASE_URL}
+  records:
+    adapter: postgres
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
   identity:
     adapter: local-dev
     why: test users signed in the test's process

@@ -27,6 +27,9 @@ bindings:
   state:
     adapter: azure-postgresql-flexible
     url: {key_vault: agent-database-url}
+  records:
+    adapter: postgres
+    url: {key_vault: agent-database-url}
   identity:
     adapter: entra-id
     tenant: {env: AZURE_TENANT_ID}

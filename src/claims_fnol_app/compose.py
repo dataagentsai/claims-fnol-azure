@@ -58,10 +58,13 @@ def overlay(name: str | None = None) -> Path:
 
 
 async def migrate_agent_state(url: str) -> None:
-    """Create `agent_state` if it is not there (idempotent DDL; FINDINGS F-24)."""
-    sql = (resources.files("claims_fnol_app") / "migrations" / "001_agent_state.sql").read_text()
+    """Create `agent_state` and our records if they are not there: every file in
+    `migrations/`, in order, each idempotent DDL (FINDINGS F-24; A3)."""
+    folder = resources.files("claims_fnol_app") / "migrations"
+    files = sorted((p for p in folder.iterdir() if p.name.endswith(".sql")), key=lambda p: p.name)
     async with await psycopg.AsyncConnection.connect(url, autocommit=True) as conn:
-        await conn.execute(sql.encode())
+        for file in files:
+            await conn.execute(file.read_text().encode())
 
 
 def hooks(

@@ -24,6 +24,11 @@ bindings:
     adapter: postgres
     why: the local PostgreSQL service; Azure's flexible server is Tier 3
     url: {env: CLAIMS_DBOS_DATABASE_URL}
+  # Our own approval and escalation records (A3): the waits write them, the
+  # claims system reads approvals from them on its own connection.
+  records:
+    adapter: postgres
+    url: {env: CLAIMS_DBOS_DATABASE_URL}
   identity:
     adapter: local-dev
     why: test users signed on this Mac (/signin); Entra ID is Tier 4
