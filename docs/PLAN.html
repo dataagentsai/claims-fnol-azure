@@ -192,17 +192,17 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t4a">
-  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill doing">In progress · A5, A3, A1 done 10 Oct</span></div>
+  <div class="tierhead"><h3>Tier 4a · Safe for Azure (from the design audit)</h3><span class="pill doing">In progress · A1, A3, A4, A5, A7, A8 done</span></div>
   <p class="muted">The 10 Oct audit of every page against the code (<code>docs/DESIGN-AUDIT.md</code>, group A). These are where the design is right and the code isn't there yet, on the paths that move money or identify people.</p>
   <ul class="tasks">
     <li><b>A1</b>✅  The claims system verifies the caller's token on every call: an on-behalf-of exchange in the agent, and token checks at the claims server (today it trusts what the agent asserts; F-23)</li>
     <li><b>A2</b> Policyholder sign-in with Entra (code flow + PKCE), the policyholder-id claim, and a sessions table for refresh tokens (F-43)</li>
     <li><b>A3</b>✅  Our own <code>approvals</code> and <code>escalations</code> tables behind an interface (id = DBOS workflow id, <code>args_digest</code>); the claims system reads ours, never DBOS's internal tables</li>
-    <li><b>A4</b> A database role per job: the claims system reads approvals only; no app uses the admin login</li>
+    <li><b>A4</b>✅  A database role per job: the claims system reads approvals only; no app uses the admin login</li>
     <li><b>A5</b>✅  A tool's idempotency key comes from the message, not the run, so a crash mid-turn can't register a claim twice</li>
     <li><b>A6</b> A config port with an App Configuration adapter; the ₹25,000 limit read from it by the agent <i>and</i> the claims system (F-35)</li>
-    <li><b>A7</b> Container Apps revisions in Multiple mode, for the canary exercise</li>
-    <li><b>A8</b> The model allow-list in the APIM policy</li>
+    <li><b>A7</b>✅  Container Apps revisions in Multiple mode, for the canary exercise</li>
+    <li><b>A8</b>✅  The model allow-list in the APIM policy</li>
     <li><b>A9</b> The <code>guardrail_log</code> evaluator: Content Safety's verdicts recorded as check results</li>
     <li><b>A11–A13</b> Security basics: a pre-model injection rule and a post-tool hidden-instruction rule (both positions are empty today); Aadhaar and PAN in redaction and <code>no_pii_echo</code>; a kill switch per agent</li>
     <li><b>A10</b> (already Tier 4) the gates in GitHub Actions before every deploy</li>
@@ -357,6 +357,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>10 Oct 2026</td><td>Tier 4a: <b>A4</b> (a database login per app: the claims system may only read approvals in the agent database; no app uses the admin login; per-secret Key Vault access), <b>A7</b> (the agent app can split traffic between revisions), <b>A8</b> (APIM refuses any model not on the allow-list, before any paid call) done. 589 tests, all four gates. Findings F-61 to F-70.</td></tr>
 <tr><td>10 Oct 2026</td><td>Tier 4a: <b>A5</b> (a redelivered message runs as the same run, so a crash never repeats a side effect), <b>A3</b> (our own approvals and escalations records behind an interface; the claims system reads them read-only and checks a digest of the exact payout; no DBOS internals), <b>A1</b> (the claims system verifies the caller's token: local-dev on the Mac, Entra in Azure; "trust the agent" refused outside tests; the payout workflow has its own login) done. Both agents pass all four gates (1,889 and 520 tests). Findings F-48 to F-60.</td></tr>
 <tr><td>10 Oct 2026</td><td>Design audit: all 173 pages of the series checked against the code (<code>docs/DESIGN-AUDIT.md</code>). Added <b>Tier 4a</b> (safe for Azure: token checks at the claims server, Entra sign-in, our own approvals tables, database roles, crash-safe idempotency keys, App Configuration, revisions, allow-list, Content Safety results, security basics), <b>Tier 4b</b> (one rule library; rule → finding → alert → dashboard on Azure), <b>Tiers 13–14</b> (production hardening; model layer v2), and the audit items owned by no tier to Tiers 10–12. Fixed the $5/$10 contradiction.</td></tr>
 <tr><td>9 Oct 2026</td><td>Azure tools installed (Azure CLI 2.91, azd 1.35, Bicep 0.48 via <code>az bicep install</code>). <code>infra/main.bicep</code> compiles clean. Owner decisions on F-39/40/41/45/46 recorded in FINDINGS.md: database password in Key Vault for dev, Content Safety fails open (marked and counted), scale to zero with seeding only an empty database, South India screening accepted. Waiting on the Pay-As-You-Go subscription.</td></tr>
