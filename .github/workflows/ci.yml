@@ -1,0 +1,268 @@
+# CI (Tier 4a A10): the checks, the suite and the four gates on every push and
+# pull request to main; then both images, pushed to GitHub Container Registry
+# only from a push to main. Deploy (deploy.yml) runs only after this succeeded
+# for the same commit.
+#
+# The workspace is laid out as the repositories sit on the owner's Mac, so every
+# relative path in the code, the YAML and the Dockerfiles resolves unchanged
+# (FINDINGS F-44, F-100):
+#
+#   $GITHUB_WORKSPACE/claims-fnol-azure      this repository (every `run` step works here)
+#   $GITHUB_WORKSPACE/reference-agent        the harness, packages/agent-harness (a path dependency)
+#   $GITHUB_WORKSPACE/agenttwin              the simulator (a dev path dependency; the gates' runner)
+#   $GITHUB_WORKSPACE/clean-ai-engineering   tools/gates.py, the yardstick, the AOAS, stacks/
+#   $GITHUB_WORKSPACE/ai-harness-catalog     AHC: capabilities and tools/resolve.js (node)
+#   $GITHUB_WORKSPACE/ai-assurance-catalog   AAC: the obligations the tests' `discharges` name
+#
+# Sibling refs: `main` while the repositories move together. To pin one, set
+# its *_REF below to a full commit SHA (`git -C ../<repo> rev-parse HEAD`);
+# a pinned build is reproducible, an unpinned one sees the siblings' latest.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REFERENCE_AGENT_REF: main
+  AGENTTWIN_REF: main
+  CLEAN_AI_ENGINEERING_REF: main
+  AI_HARNESS_CATALOG_REF: main
+  AI_ASSURANCE_CATALOG_REF: main
+  AGENT_IMAGE: ghcr.io/dataagentsai/claims-fnol-agent
+  CLAIMS_SYSTEM_IMAGE: ghcr.io/dataagentsai/claims-fnol-claims-system
+
+jobs:
+  checks:
+    name: Checks, suite and gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: claims-fnol-azure
+
+    services:
+      # PostgreSQL 16, as on the Mac and in Azure. No test needs `vector`, so the
+      # plain image. The service superuser has CREATEROLE, which the A4 role tests
+      # need (tests/pg.py makes and drops throwaway roles and databases).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # tests/pg.py: the server, no database in the URL, a role that may create
+      # databases and roles. Nothing else is read from .env (there is none here).
+      CLAIMS_TEST_SERVER_URL: postgresql://postgres:postgres@localhost:5432
+      # The scripted model only: no test calls Groq, so no key is given.
+      UV_PYTHON: "3.13"
+
+    steps:
+      - name: Check out claims-fnol-azure
+        uses: actions/checkout@v5
+        with:
+          path: claims-fnol-azure
+      - name: Check out reference-agent
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/reference-agent
+          ref: ${{ env.REFERENCE_AGENT_REF }}
+          path: reference-agent
+      - name: Check out agenttwin
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/agenttwin
+          ref: ${{ env.AGENTTWIN_REF }}
+          path: agenttwin
+      - name: Check out clean-ai-engineering
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/clean-ai-engineering
+          ref: ${{ env.CLEAN_AI_ENGINEERING_REF }}
+          path: clean-ai-engineering
+      - name: Check out ai-harness-catalog
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/ai-harness-catalog
+          ref: ${{ env.AI_HARNESS_CATALOG_REF }}
+          path: ai-harness-catalog
+      - name: Check out ai-assurance-catalog
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/ai-assurance-catalog
+          ref: ${{ env.AI_ASSURANCE_CATALOG_REF }}
+          path: ai-assurance-catalog
+
+      - name: Record the sibling commits
+        run: scripts/ci/siblings.sh
+
+      - name: Set up uv and Python 3.13
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: claims-fnol-azure/uv.lock
+
+      - name: Set up Node (the gates resolve the profile with the AHC's resolve.js)
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install the AHC resolver's packages
+        working-directory: ai-harness-catalog
+        run: npm ci --no-audit --no-fund
+
+      - name: Install the project and its dev extra
+        # Not --frozen: the harness and agenttwin are path dependencies at their
+        # main, and a dependency they add since the lock was written must be
+        # installed. A lock that moved is printed, so it is seen.
+        run: |
+          uv sync --extra dev
+          git diff --stat -- uv.lock
+
+      - name: psql (the role tests run infra/sql/roles.sql with it; 15+ for \getenv)
+        run: |
+          command -v psql || { sudo apt-get update -q && sudo apt-get install -y -q postgresql-client; }
+          psql --version
+
+      - name: ruff
+        run: uv run ruff check src tests evals scripts
+      - name: mypy
+        run: uv run mypy
+      - name: lint-imports
+        run: uv run lint-imports
+      - name: actionlint
+        run: scripts/ci/actionlint.sh
+
+      - name: The full suite
+        # The gates' own command (gates.yaml `tests.command`), writing the JUnit
+        # report where the gates read it; the gates then reuse it (--skip-tests)
+        # rather than run the suite a second time.
+        run: uv run python -m pytest -q -p no:cacheprovider --junitxml=reports/gates/junit.xml
+
+      - name: The four gates
+        working-directory: clean-ai-engineering
+        run: uv run tools/gates.py ../claims-fnol-azure --skip-tests
+
+      - name: Upload the gates' verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gates-verdict
+          path: |
+            claims-fnol-azure/reports/gates/verdict.md
+            claims-fnol-azure/reports/gates/verdict.json
+            claims-fnol-azure/reports/gates/junit.xml
+          if-no-files-found: warn
+
+      - name: Compile the Bicep
+        # The runner's Azure CLI; `az bicep install` fetches Bicep if absent.
+        # No sign-in: compiling needs none.
+        run: |
+          az bicep install || true
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          echo "infra/main.bicep compiles."
+
+  images:
+    name: Images
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Push only from a push to main; a pull request builds and discards.
+      PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      # The images need the harness and two parts of clean-ai-engineering as
+      # named build contexts (the command at the top of each Dockerfile).
+      - name: Check out claims-fnol-azure
+        uses: actions/checkout@v5
+        with:
+          path: claims-fnol-azure
+      - name: Check out reference-agent
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/reference-agent
+          ref: ${{ env.REFERENCE_AGENT_REF }}
+          path: reference-agent
+      - name: Check out clean-ai-engineering
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/clean-ai-engineering
+          ref: ${{ env.CLEAN_AI_ENGINEERING_REF }}
+          path: clean-ai-engineering
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: claims-fnol-azure
+          file: claims-fnol-azure/agent.Dockerfile
+          build-contexts: |
+            harness=reference-agent/packages/agent-harness
+            stacks=clean-ai-engineering/stacks
+          push: ${{ env.PUSH == 'true' }}
+          tags: |
+            ${{ env.AGENT_IMAGE }}:${{ github.sha }}
+            ${{ env.AGENT_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,scope=agent,mode=max
+
+      - name: Build the claims-system image
+        uses: docker/build-push-action@v6
+        with:
+          context: claims-fnol-azure
+          file: claims-fnol-azure/claims-system.Dockerfile
+          build-contexts: |
+            harness=reference-agent/packages/agent-harness
+            worlds=clean-ai-engineering/gates/motor-claims-fnol/worlds
+          push: ${{ env.PUSH == 'true' }}
+          tags: |
+            ${{ env.CLAIMS_SYSTEM_IMAGE }}:${{ github.sha }}
+            ${{ env.CLAIMS_SYSTEM_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=claims-system
+          cache-to: type=gha,scope=claims-system,mode=max
+
+      - name: Say what was built
+        run: |
+          if [ "$PUSH" = "true" ]; then
+            echo "Pushed $AGENT_IMAGE:${GITHUB_SHA} and $CLAIMS_SYSTEM_IMAGE:${GITHUB_SHA} (and :latest)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Built both images; not pushed (not a push to main)." >> "$GITHUB_STEP_SUMMARY"
+          fi
