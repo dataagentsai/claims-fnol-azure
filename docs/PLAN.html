@@ -58,7 +58,7 @@ ul.tasks li{margin:3px 0}
 <main>
 
 <h1>Motor claims FNOL agent on Azure: the plan</h1>
-<p class="muted">From where we are to "it runs end to end in Azure", then what comes after. Last updated <b>9 Oct 2026</b>. This page is updated as each tier finishes; the change log is at the bottom.</p>
+<p class="muted">From where we are to "it runs end to end in Azure", then what comes after. Last updated <b>13 Oct 2026</b>. This page is updated as each tier finishes; the change log is at the bottom.</p>
 
 <div class="card">
   <p><b>In one line:</b> build the agent, prove it on your Mac against the 29 scenarios, then deploy it to Azure on the free tier and walk through every resource yourself.</p>
@@ -71,8 +71,8 @@ ul.tasks li{margin:3px 0}
   <a href="#t1"><span class="pill done">Done</span><b>Tier 1</b>Passes the gates on the Mac</a>
   <a href="#t2"><span class="pill done">Done</span><b>Tier 2</b>Chat with it on the Mac</a>
   <a href="#t2b"><span class="pill done">Done</span><b>Tier 2b</b>Checks as plug-ins</a>
-  <a href="#t3"><span class="pill next">Next</span><b>Tier 3</b>Azure resources exist</a>
-  <a href="#t4"><span class="pill next">Planned</span><b>Tier 4</b>Runs in Azure</a>
+  <a href="#t3"><span class="pill done">Done</span><b>Tier 3</b>Azure resources exist</a>
+  <a href="#t4"><span class="pill next">In progress</span><b>Tier 4</b>Runs in Azure</a>
   <a href="#t4a"><span class="pill done">Done</span><b>Tier 4a</b>Safe for Azure</a>
   <a href="#t4b"><span class="pill next">Planned</span><b>Tier 4b</b>The evaluation loop</a>
   <a href="#t5"><span class="pill next">Planned</span><b>Tier 5</b>Your guided tour</a>
@@ -80,7 +80,7 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" style="border-color:var(--doing)">
-  <p><b>Paused 11 Oct → 29 Oct for the grant deadline.</b> The Corrigibility Research Fund and Foresight close 31 Oct (we submit by 28 Oct). They fund the AgentTwin lab (<code>DataAgents.ai/52-agenttwin-lab-grant.md</code>), not this deployment, so build time goes there. Everything here that runs without Azure is done (Tier 4a); the next steps need the Pay-As-You-Go subscription anyway. Resume on 29 Oct with <code>azd up</code>, Tier 4 live checks, then Tier 4b. This agent is cited in the grant as evidence that the harness carries to a second domain and a second stack (~84% reuse).</p>
+  <p><b>Resumed early, 13 Oct, on an Azure free trial</b> ($200 credit to ~12 Nov; PostgreSQL B1ms free for 12 months). <code>azd up</code> ran; the agent is live at <a href="https://ca-fnol-agent.agreeableriver-056a26f2.centralindia.azurecontainerapps.io/signin">its public sign-in</a>, a test policyholder signs in with Entra and sees their own claims over MCP. Grant work (submit by 28 Oct) still comes first; Tier 4's last checks and Tier 4b fit around it. This agent is cited in the grant as evidence that the harness carries to a second domain and a second stack (~84% reuse).</p>
 </div>
 
 <h2>Can it be tested on the Mac?</h2>
@@ -171,18 +171,19 @@ ul.tasks li{margin:3px 0}
 </div>
 
 <div class="card" id="t3">
-  <div class="tierhead"><h3>Tier 3 · The Azure resources exist</h3><span class="pill next">Planned · ≈2 days</span></div>
+  <div class="tierhead"><h3>Tier 3 · The Azure resources exist</h3><span class="pill done">Done · 13 Oct</span></div>
   <ul class="tasks">
     <li>First, each service's free allowance checked on its pricing page, and you confirm</li>
-    <li>A <b>$10 budget alert</b> before anything else (Pay-As-You-Go: the 12-month free offer is used up, so PostgreSQL is the one real cost)</li>
+    <li>A <b>$10 budget alert</b> before anything else (on the 13 Oct free trial PostgreSQL is free for 12 months too)</li>
     <li>Bicep + <code>azd</code> (Azure's deploy tool) describe: Container Apps environment, PostgreSQL B1MS with pgvector (stopped when idle), APIM Consumption with Groq behind it, Content Safety F0, Key Vault, a managed identity per app, Log Analytics + App Insights, App Configuration (free), an Entra app registration</li>
   </ul>
   <div class="dw"><b>Done when:</b> <code>azd up</code> creates everything from nothing, and <code>azd down</code> removes all of it.</div>
   <p class="muted"><b>Needs from you:</b> an Azure subscription where you are Owner, with permission to create app registrations (a personal free account has both).</p>
+  <p><b>Result:</b> ✅ all 13 modules created on the free trial (APIM Consumption and the budget included), the Groq key in Key Vault, both Entra apps and the three test users, both database logins. Not yet run: <code>azd down</code>. Found on the way: azd demands a running Docker even for prebuilt images (F-112), a new subscription's first deployment loses azd's progress poll (F-113).</p>
 </div>
 
 <div class="card" id="t4">
-  <div class="tierhead"><h3>Tier 4 · It runs in Azure</h3><span class="pill next">Planned · ≈1–2 days</span></div>
+  <div class="tierhead"><h3>Tier 4 · It runs in Azure</h3><span class="pill next">In progress · since 13 Oct</span></div>
   <ul class="tasks">
     <li>Images built and pushed to GitHub's container registry; deployed to Container Apps (agent, claims server)</li>
     <li>GitHub Actions deploys with a federated login (OIDC): no secrets stored in GitHub; <b>the four gates run before every deploy</b></li>
@@ -193,6 +194,7 @@ ul.tasks li{margin:3px 0}
   </ul>
   <div class="dw"><b>Done when:</b> you sign in at a public URL and report a claim; that conversation's trace is in App Insights with each check's result on it (ours and Content Safety's); the model call is in APIM analytics; spend stays inside the budget.</div>
   <p class="muted"><b>Needs from you:</b> approve adding the deploy login to the <code>claims-fnol-azure</code> repo.</p>
+  <p><b>So far:</b> ✅ images from GHCR on Container Apps; ✅ Entra sign-in live for a handler (the desk, F-30 holds) and a policyholder; ✅ the agent reaches the claims system over MCP with an on-behalf-of token, and Azure PostgreSQL over TLS; ✅ the opening lists the policyholder's own claims and what the agent can and cannot do. Four live-only bugs fixed: Azure's <code>public</code> schema (F-110), the claims-system image's missing overlay (F-111), Entra's holder claim as a one-item list (F-114, in the library), the claim only in the owning app's tokens (F-115). <b>Left:</b> report a claim through APIM → Groq; the trace in App Insights with each check's result; the call in APIM analytics; the GitHub deploy login (images are switched by hand today).</p>
 </div>
 
 <div class="card" id="t4a">
@@ -361,6 +363,7 @@ ul.tasks li{margin:3px 0}
 <h2>Change log</h2>
 <div class="tbl"><table>
 <tr><th>Date</th><th>Change</th></tr>
+<tr><td>13 Oct 2026</td><td><b>Tier 3 done, Tier 4 started</b>, early, on an Azure free trial. <code>azd up</code> created everything; the agent and claims system run from GHCR images on Container Apps; a test policyholder (Rohan, PH-1001) signs in with Entra (and Microsoft Authenticator: a new tenant has Security Defaults on) and sees their own claims over MCP. The first live run found six things offline tests could not: F-110 to F-115 (Azure's public schema, the claims image's overlay, azd's Docker check, azd's progress poll, Entra's list-shaped holder claim, the claim only in the owning app's tokens). The opening now says what the agent can and cannot do, held to the AOAS's <code>purpose.does</code>. 750 tests here, 2,060 in the reference agent; CI green.</td></tr>
 <tr><td>11 Oct 2026</td><td><b>Tier 4a done</b>: A2 (Entra sign-in for policyholders and handlers, the policyholder id as a signed directory-extension claim) and A10 (CI on GitHub: full suite, four gates, Bicep, both images to GHCR; deploy by OIDC, waiting for the owner's one-time setup). 733 tests; CI green. <b>Paused until 29 Oct</b> for the grant deadline.</td></tr>
 <tr><td>11 Oct 2026</td><td>Tier 4a: <b>A9, A11, A12, A13</b> done. A9: APIM writes Content Safety's verdict on every response (<code>x-content-safety</code>), both model clients carry it on the response and the span, and <code>guardrail_log</code> records it at <code>online</code>. A11: the library's <code>no_known_injection</code> (pre-model, safe reply) and <code>no_instructions_in_result</code> (post-tool: the result stays data, later writes in the run wait for the policyholder); the clothing agent places both too. A12: Aadhaar (Verhoeff check digit) and PAN masked and never read back; an agent registers its own patterns (F-10 fixed). A13: <code>agent.enabled</code>, read before every turn; false is the paused reply with no model call, the desk untouched. Checked on the Mac: a claim-status chat answered, an injection message refused, no model call. 655 tests here, 2031 in the reference agent; all four gates for both. Findings F-79 to F-90.</td></tr>
 <tr><td>10 Oct 2026</td><td>Tier 4a: <b>A6</b> done: a config port (environment, static, App Configuration over REST with the managed identity); the ₹25,000 limit is one App Configuration key read by both the agent and the claims system, refreshed every 30 s, never above the spec's value, the stricter side winning. Checked live on the Mac: lowering the limit made a ₹25,000 payout wait, without a restart. 616 tests, all four gates. Findings F-71 to F-78.</td></tr>
