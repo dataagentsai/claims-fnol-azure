@@ -228,7 +228,11 @@ agent's sign-in, the claims system's token check and the hook all read. To
 link another person in your tenant to a policy:
 
     az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/users/<user@domain>" \
-      --body "{\"extension_$(azd env get-value ENTRA_APP_ID | tr -d -)_customer_id\": \"PH-1001\"}"
+      --body "{\"extension_$(azd env get-value ENTRA_APP_ID | tr -d -)_customer_id\": \"PH-1001\",
+               \"extension_$(azd env get-value CLAIMS_SYSTEM_APP_ID | tr -d -)_customer_id\": \"PH-1001\"}"
+
+Both: Entra puts an extension attribute only in the tokens of the app that owns
+it, so the agent's app and the claims system's each own one (FINDINGS F-115).
 
 Remove the test users with `az ad user delete --id rohan@<your domain>` (and
 `meera`, `asha`); `azd down` does not, since they are not in the resource group.

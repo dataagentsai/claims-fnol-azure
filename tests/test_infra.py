@@ -258,7 +258,9 @@ IMAGE_OVERLAYS = [
 ]
 
 
-@pytest.mark.parametrize(("dockerfile", "overlay"), IMAGE_OVERLAYS, ids=[o[0] for o in IMAGE_OVERLAYS])
+@pytest.mark.parametrize(
+    ("dockerfile", "overlay"), IMAGE_OVERLAYS, ids=[o[0] for o in IMAGE_OVERLAYS]
+)
 def test_each_image_carries_its_azure_overlay(dockerfile: str, overlay: str) -> None:
     text = (ROOT / dockerfile).read_text()
     copied = [
@@ -622,10 +624,24 @@ SIGN_IN = [
         "hook",
         r'attribute="\$\{holder_claim#extn\.\}"',
     ),
+    # Entra emits an extension attribute only for the app that owns it (F-115):
+    # each app owns one, claims its own, and a policyholder is given both.
     (
-        "and puts it in both apps' access tokens",
+        "the agent's app owns one and puts it in its access tokens",
         "hook",
-        r'(?s)"optionalClaims": \$\{optional_claims\}.*"optionalClaims": \$\{optional_claims\}',
+        r'(?s)extension="\$\(own_extension "\$object_id" "\$app_id"\)".*'
+        r'"optionalClaims": \$\{optional_claims\}',
+    ),
+    (
+        "the claims system's app owns its own and puts that in its tokens",
+        "hook",
+        r'(?s)claims_extension="\$\(own_extension "\$claims_object" "\$claims_id"\)".*'
+        r'"optionalClaims": \$\(claimed "\$claims_extension"\)',
+    ),
+    (
+        "a policyholder is given both",
+        "hook",
+        r'\\"\$\{extension\}\\": \\"\$\{holder\}\\", \\"\$\{claims_extension\}\\": \\"\$\{holder\}\\"',
     ),
     (
         "the redirect URI is the agent's /signin/callback",

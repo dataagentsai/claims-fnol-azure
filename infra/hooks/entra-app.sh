@@ -22,7 +22,7 @@
 #     server redeems the code with the app's secret (a confidential client;
 #     an SPA redirect's code can only be redeemed from a browser)
 #   - the policyholder id (A2, FINDINGS F-91): a directory extension attribute
-#     on users, registered on this app, named from HOLDER_CLAIM
+#     on users, registered on this app and on the claims system's (F-115), named from HOLDER_CLAIM
 #     (`extn.<attribute>`, default extn.customer_id), and an optional claim
 #     that puts it in this app's access tokens. No premium licence, and Entra
 #     signs it, so the claims system verifies it without asking the agent.
@@ -86,17 +86,28 @@ else
 fi
 object_id="$(az ad app show --id "$app_id" --query id -o tsv)"
 
-# The policyholder id's directory extension attribute (A2), registered once.
-extension="extension_${app_id//-/}_${attribute}"
-have_ext="$(az rest --method GET -o tsv --uri "${graph}/applications/${object_id}/extensionProperties" \
-              --query "value[?name=='${extension}'] | length(@)")"
-if [[ "$have_ext" == "0" ]]; then
-  az rest --method POST -o none --uri "${graph}/applications/${object_id}/extensionProperties" \
-    --headers "Content-Type=application/json" \
-    --body "{\"name\": \"${attribute}\", \"dataType\": \"String\", \"targetObjects\": [\"User\"]}"
-  echo "Registered the user attribute ${extension} (in tokens as ${holder_claim})."
-fi
-optional_claims="{\"accessToken\": [{\"name\": \"${extension}\", \"source\": \"user\", \"essential\": false}]}"
+# The policyholder id's directory extension attribute (A2), registered once per
+# app. Entra puts an extension attribute only in tokens for the app that owns
+# it (FINDINGS F-115: the claims system's tokens had none while it was the
+# agent's alone), so each app owns one of the same name, both are set on every
+# policyholder, and in either app's token it is ${holder_claim}.
+own_extension() { # app object id, app id → prints the attribute's full name
+  local name="extension_${2//-/}_${attribute}" have
+  have="$(az rest --method GET -o tsv --uri "${graph}/applications/${1}/extensionProperties" \
+            --query "value[?name=='${name}'] | length(@)")"
+  if [[ "$have" == "0" ]]; then
+    az rest --method POST -o none --uri "${graph}/applications/${1}/extensionProperties" \
+      --headers "Content-Type=application/json" \
+      --body "{\"name\": \"${attribute}\", \"dataType\": \"String\", \"targetObjects\": [\"User\"]}"
+    echo "Registered the user attribute ${name} (in tokens as ${holder_claim})." >&2
+  fi
+  printf '%s' "$name"
+}
+claimed() { # extension name → the optionalClaims that put it in access tokens
+  printf '{"accessToken": [{"name": "%s", "source": "user", "essential": false}]}' "$1"
+}
+extension="$(own_extension "$object_id" "$app_id")"
+optional_claims="$(claimed "$extension")"
 
 redirects="[]"
 if [[ -n "${ENTRA_REDIRECT_URI:-}" ]]; then
@@ -169,10 +180,11 @@ if [[ -z "$claims_id" ]]; then
   echo "Created app registration $claims_name ($claims_id)."
 fi
 claims_object="$(az ad app show --id "$claims_id" --query id -o tsv)"
+claims_extension="$(own_extension "$claims_object" "$claims_id")"
 claims_body="$(cat <<JSON
 {
   "identifierUris": ["${claims_audience}"],
-  "optionalClaims": ${optional_claims},
+  "optionalClaims": $(claimed "$claims_extension"),
   "api": {
     "requestedAccessTokenVersion": 2,
     "oauth2PermissionScopes": [
@@ -316,7 +328,8 @@ for entry in ${test_users[@]+"${test_users[@]}"}; do
   user_id="$(az ad user show --id "${login}@${domain}" --query id -o tsv)"
   if [[ -n "$holder" ]]; then
     az rest --method PATCH -o none --uri "${graph}/users/${user_id}" \
-      --headers "Content-Type=application/json" --body "{\"${extension}\": \"${holder}\"}"
+      --headers "Content-Type=application/json" \
+      --body "{\"${extension}\": \"${holder}\", \"${claims_extension}\": \"${holder}\"}"
   else
     held="$(az rest --method GET -o tsv \
               --uri "${graph}/servicePrincipals/${sp_id}/appRoleAssignedTo" \
