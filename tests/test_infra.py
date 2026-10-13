@@ -224,6 +224,7 @@ DOCKERFILES: list[tuple[str, dict[str, str], str]] = [
         {
             "harness": "../reference-agent/packages/agent-harness",
             "worlds": "../clean-ai-engineering/gates/motor-claims-fnol/worlds",
+            "stacks": "../clean-ai-engineering/stacks",
         },
         "claims_system",
     ),
@@ -246,6 +247,31 @@ def test_each_dockerfile_copies_what_exists(
             assert (ROOT / source).exists(), f"{dockerfile} copies missing {source}"
     assert (ROOT / "src" / module / "__main__.py").is_file()
     assert re.search(r"^USER \d+$", text, re.M), "runs as a non-root user"
+
+
+# The overlay each image reads in Azure, and what that overlay's `profile:`
+# needs beside it: the image must carry all of it (F-111: the claims-system
+# image had no config/ and stopped at start with "no azure.yaml").
+IMAGE_OVERLAYS = [
+    ("agent.Dockerfile", "config/azure.yaml"),
+    ("claims-system.Dockerfile", "config/claims-system/azure.yaml"),
+]
+
+
+@pytest.mark.parametrize(("dockerfile", "overlay"), IMAGE_OVERLAYS, ids=[o[0] for o in IMAGE_OVERLAYS])
+def test_each_image_carries_its_azure_overlay(dockerfile: str, overlay: str) -> None:
+    text = (ROOT / dockerfile).read_text()
+    copied = [
+        source
+        for line in re.findall(r"^COPY (?!--from)(.+)$", text, re.M)
+        for source in line.split()[:-1]
+    ]
+    assert any(overlay == c or overlay.startswith(c.rstrip("/") + "/") for c in copied), overlay
+    profile = (ROOT / overlay).parent / yaml.safe_load((ROOT / overlay).read_text())["profile"]
+    assert profile.resolve().relative_to(ROOT).as_posix() in copied
+    extends = yaml.safe_load(profile.read_text())["extends"]
+    assert extends.startswith("../clean-ai-engineering/stacks/")
+    assert "COPY --from=stacks . /app/clean-ai-engineering/stacks" in text
 
 
 def test_no_build_is_sent_the_local_secrets() -> None:

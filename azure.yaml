@@ -26,9 +26,13 @@ services:
   agent:
     host: containerapp
     image: ${AGENT_IMAGE}
+    docker:
+      remoteBuild: true
   claims-system:
     host: containerapp
     image: ${CLAIMS_SYSTEM_IMAGE}
+    docker:
+      remoteBuild: true
 
 hooks:
   preprovision:

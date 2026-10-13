@@ -285,7 +285,9 @@ if (( ${#missing[@]} )); then
   echo "Test users to create in ${domain}:"
   for entry in "${missing[@]}"; do
     IFS='|' read -r login display holder <<<"$entry"
-    echo "  ${login}@${domain}  ${display}  ${holder:+policyholder ${holder}}${holder:-claims handler (desk.handler)}"
+    role="claims handler (desk.handler)"
+    [[ -n "$holder" ]] && role="policyholder ${holder}"
+    echo "  ${login}@${domain}  ${display}  ${role}"
   done
   if [[ "$yes_to_users" != true ]]; then
     answer=""

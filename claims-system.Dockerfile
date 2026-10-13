@@ -7,11 +7,14 @@
 #   docker buildx build -f claims-system.Dockerfile \
 #     --build-context harness=../reference-agent/packages/agent-harness \
 #     --build-context worlds=../clean-ai-engineering/gates/motor-claims-fnol/worlds \
+#     --build-context stacks=../clean-ai-engineering/stacks \
 #     -t ghcr.io/<owner>/claims-fnol-claims-system:<tag> .
 #
 #   harness  the agent_harness library (a path dependency in pyproject.toml)
 #   worlds   the FNOL world the seed reads (claims_system.__main__.WORLD,
 #            ../clean-ai-engineering/gates/motor-claims-fnol/worlds/...)
+#   stacks   the stack profiles harness-profile.yaml extends; the azure overlay
+#            (config/claims-system/azure.yaml) names that profile (F-111)
 #
 # On start: migrate (idempotent DDL), seed only a never-seeded database
 # (`--if-empty`), serve on 9050. With scale-to-zero every cold start is a
@@ -43,7 +46,10 @@ FROM base
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /app/venv /app/venv
 COPY --from=worlds . /app/clean-ai-engineering/gates/motor-claims-fnol/worlds
+COPY --from=stacks . /app/clean-ai-engineering/stacks
 WORKDIR /app/claims-fnol-azure
+COPY harness-profile.yaml ./
+COPY config/claims-system ./config/claims-system
 COPY src ./src
 ENV PATH=/app/venv/bin:$PATH \
     PYTHONPATH=/app/claims-fnol-azure/src

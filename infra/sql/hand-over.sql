@@ -12,6 +12,13 @@ SELECT format('ALTER SCHEMA %I OWNER TO %I', nspname, :'owner')
    AND nspname <> 'public'          -- public belongs to pg_database_owner: the database's owner
    AND nspowner <> (SELECT oid FROM pg_roles WHERE rolname = :'owner') \gexec
 
+-- public is left with its owner, but the role may create in it. On this Mac
+-- public belongs to pg_database_owner (the role, via the database), so this
+-- changes nothing; on Azure Flexible Server it belongs to azure_pg_admin, and
+-- without this the claims system cannot make its first table (FINDINGS F-110).
+SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'owner')
+ WHERE 'public' = ANY (:'schemas'::text[]) \gexec
+
 -- Tables, views and the like; their indexes, TOAST tables and the sequences
 -- their columns own move with them.
 SELECT format('ALTER %s %s OWNER TO %I',

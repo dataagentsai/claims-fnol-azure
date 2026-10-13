@@ -252,6 +252,7 @@ jobs:
           build-contexts: |
             harness=reference-agent/packages/agent-harness
             worlds=clean-ai-engineering/gates/motor-claims-fnol/worlds
+            stacks=clean-ai-engineering/stacks
           push: ${{ env.PUSH == 'true' }}
           tags: |
             ${{ env.CLAIMS_SYSTEM_IMAGE }}:${{ github.sha }}
