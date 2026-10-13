@@ -24,6 +24,25 @@ LIST_POLICIES = "list_policies"
 CLOSED = frozenset({"rejected", "paid", "withdrawn"})
 """AOAS `claim_status.terminal`: a closed claim is not shown as open."""
 
+CAN_DO = {
+    "claim status": "check where a claim has got to",
+    "policy status": "check whether a policy is in force",
+    "reporting a new claim (first notice of loss)": "report an incident and get a claim reference",
+    "sending a document the claim is waiting for": "send a document a claim is waiting for",
+    "withdrawing a claim not yet assessed": "withdraw a claim that has not been assessed yet",
+    "asking for the payout of an approved claim": "ask for the payout of an approved claim",
+    "handing the conversation to a person": "talk to a person at any time",
+}
+"""AOAS `purpose.does`, in the words a policyholder is shown; a test holds it to
+the AOAS, so a thing the agent can do is never missing from the opening."""
+
+CANNOT_DO = (
+    "say whether something is covered or how much will be paid (an assessor decides)",
+    "judge who was at fault",
+)
+"""The two refusals a policyholder is likeliest to ask about (AOAS R-COVERAGE,
+R-LIABILITY), said up front so a refusal later is no surprise."""
+
 
 async def opening(
     identity: Identity,
@@ -86,8 +105,11 @@ def _words(
     if waiting:
         lines.append("Already in hand:")
         lines.extend(f"- {w}" for w in waiting)
+    lines.append("I can:")
+    lines.extend(f"- {line}" for line in CAN_DO.values())
+    lines.append("I cannot " + ", or ".join(CANNOT_DO) + ".")
     lines.append("What can I help with?")
     return "\n".join(lines)
 
 
-__all__ = ["LIST_CLAIMS", "LIST_POLICIES", "opening"]
+__all__ = ["CANNOT_DO", "CAN_DO", "LIST_CLAIMS", "LIST_POLICIES", "opening"]
