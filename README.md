@@ -331,6 +331,7 @@ nothing at dev traffic either way.
 | App Configuration, Free | $0 | $0 | $0 | Retail Prices API, "Free Instance" |
 | Content Safety, F0 | 5,000 text records a month free | $0 | $0 | azure.microsoft.com/pricing/details/cognitive-services/content-safety |
 | Budget, identities, Entra app | free | $0 | $0 | — |
+| Alerts: 6 log rules (15 min) + email | $0.50 a rule a month; emails free to 1,000 | $0.10/day | $0.10/day | Retail Prices API, "Alerts System Log Monitored at 15 Minute Frequency", "Emails" (F-123) |
 | **Total** | | **~$0.73/day** | **~$0.14/day** | |
 
 Retail Prices API: `https://prices.azure.com/api/retail/prices`, filtered by

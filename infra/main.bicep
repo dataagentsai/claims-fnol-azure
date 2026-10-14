@@ -160,6 +160,19 @@ module monitoring 'modules/monitoring.bicep' = {
   }
 }
 
+// Email alerts on the agent's own telemetry: six log rules and one action group
+// (F-123). The same address as the budget's alerts.
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  scope: rg
+  params: {
+    location: location
+    tags: tags
+    workspaceId: monitoring.outputs.workspaceId
+    email: budgetContactEmail
+  }
+}
+
 module postgres 'modules/postgres.bicep' = {
   name: 'postgres'
   scope: rg
