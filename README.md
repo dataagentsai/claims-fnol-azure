@@ -97,7 +97,7 @@ Tier 3: `infra/` (Bicep, one module per resource, each starting with what it is,
 why it is here and what it costs), `azure.yaml` (the azd project),
 `infra/hooks/` and the two Dockerfiles. Checked offline (`tests/test_infra.py`);
 CI compiles the Bicep and builds both images on every push (see "CI and
-deploy" below). Nothing has been deployed yet.
+deploy" below). First deployed on 13 Oct 2026 to an Azure free trial (FINDINGS F-110 to F-119).
 
 ### What it creates
 
@@ -114,7 +114,7 @@ South India, the only Indian region that has it):
 | Key Vault | Standard, RBAC, soft delete, no purge protection | Every secret; the overlay names them, never holds them |
 | API Management | Consumption | The model gateway: rate limit, token metrics, Content Safety, Groq |
 | Content Safety | F0 (free) | Screens each prompt and completion at APIM |
-| App Configuration | Free | `payout_limit_inr`, `online_sample_rate` (read by nothing yet, F-35) |
+| App Configuration | Free | `payout.automatic_limit_inr`, `agent.enabled` (kill switch), `conversation.resume_hours` (F-117), all label `dev`; `online_sample_rate` (read by nothing yet, F-77) |
 | Entra app registration | — | Made by a hook: `api://claims-fnol`, role `desk.handler`, the sign-in's redirect URI, the policyholder-id attribute; test users with your yes |
 
 Images come from GitHub Container Registry as public images, so there is no

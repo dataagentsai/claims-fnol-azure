@@ -220,7 +220,7 @@ resource policy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = {
     format: 'rawxml'
     value: loadTextContent('../policies/groq-api.xml')
   }
-  dependsOn: [groqKey, csEndpoint, csThreshold, identityClient, groq, logger]
+  dependsOn: [groqKey, csEndpoint, csThreshold, modelAllowList, identityClient, groq, logger] // every named value the policy reads (F-119)
 }
 
 resource logger 'Microsoft.ApiManagement/service/loggers@2024-05-01' = {
