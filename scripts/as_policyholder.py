@@ -197,6 +197,8 @@ def _call(method: str, path: str, token: str, body: dict | None = None, headers:
             status, payload = r.status, json.load(r)
     except urllib.error.HTTPError as e:
         status, payload = e.code, json.loads(e.read() or b"{}")
+    if not isinstance(payload, dict):
+        payload = {"items": payload}
     return {"http": status, "ms": int((time.time() - started) * 1000), **payload}
 
 
