@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOTENV = ROOT / ".env"
 ROLES_SQL = ROOT / "infra" / "sql" / "roles.sql"
 AGENT_ROLE, SYSTEM_ROLE = "claims_agent", "claims_system"
-CLAIMS_DB, AGENT_DB = "claims_fnol", "claims_fnol_dbos"
+CLAIMS_DB, AGENT_DB = "claims_fnol", "claims_agent"
 
 
 def read(lines: list[str]) -> dict[str, str]:

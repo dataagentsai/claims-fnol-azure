@@ -18,7 +18,7 @@
 --   PGHOST=... PGUSER=<admin> PGPASSWORD=... PGDATABASE=postgres \
 --   A4_AGENT_PASSWORD=... A4_SYSTEM_PASSWORD=... \
 --   psql -X -q -v agent_role=claims_agent -v system_role=claims_system \
---        -v agent_db=claims_fnol_dbos -v claims_db=claims_fnol -f infra/sql/roles.sql
+--        -v agent_db=claims_agent -v claims_db=claims_fnol -f infra/sql/roles.sql
 --
 -- Callers: scripts/dev_roles.py (dev-up), infra/hooks/db-roles.sh (Azure
 -- postprovision), tests/pg.py (every test that runs the apps on PostgreSQL).

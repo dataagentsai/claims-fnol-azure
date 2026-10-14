@@ -4,7 +4,7 @@
 #
 # Bicep cannot make a PostgreSQL role, so psql does, from this Mac, as the
 # server administrator, running the same infra/sql/roles.sql dev-up runs:
-#   claims_agent   owns claims_fnol_dbos (agent_state.*, DBOS's dbos.*)
+#   claims_agent   owns claims_agent (agent_state.*, DBOS's dbos.*)
 #   claims_system  owns claims_fnol; SELECT on agent_state.approvals only
 # The administrator only makes them; no app logs in as it.
 #
@@ -45,7 +45,7 @@ export PGPASSWORD A4_AGENT_PASSWORD A4_SYSTEM_PASSWORD
 PGHOST="$AZURE_POSTGRES_HOST" PGPORT=5432 PGUSER="$admin" PGDATABASE=postgres PGSSLMODE=require \
   psql -X -q \
     -v agent_role=claims_agent -v system_role=claims_system \
-    -v agent_db=claims_fnol_dbos -v claims_db=claims_fnol \
+    -v agent_db=claims_agent -v claims_db=claims_fnol \
     -f "$root/infra/sql/roles.sql"
 unset PGPASSWORD A4_AGENT_PASSWORD A4_SYSTEM_PASSWORD
 

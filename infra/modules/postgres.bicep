@@ -2,7 +2,7 @@
 //   Azure Database for PostgreSQL flexible server: the same engine the agent
 //   uses on the Mac, run by Azure. Two databases:
 //     claims_fnol       the claims system (our MCP server's own tables)
-//     claims_fnol_dbos  the agent's state and the DBOS waits (payout approvals,
+//     claims_agent  the agent's state and the DBOS waits (payout approvals,
 //                       escalations)
 //   The `vector` extension is allow-listed for Tier 7 (RAG over policy wording
 //   in the same store: one database, one backup, no search bill).
@@ -63,19 +63,19 @@ param ownerIpAddress string = ''
 @description('Where the database URLs are written: agent-database-url, claims-database-url, claims-records-database-url.')
 param keyVaultName string
 
-@description('The agent\'s login (A4): owns claims_fnol_dbos. Made by infra/hooks/db-roles.sh, not here.')
+@description('The agent\'s login (A4): owns claims_agent. Made by infra/hooks/db-roles.sh, not here.')
 param agentLogin string = 'claims_agent'
 
 @secure()
 param agentPassword string
 
-@description('The claims system\'s login (A4): owns claims_fnol, may only SELECT agent_state.approvals in claims_fnol_dbos.')
+@description('The claims system\'s login (A4): owns claims_fnol, may only SELECT agent_state.approvals in claims_agent.')
 param claimsSystemLogin string = 'claims_system'
 
 @secure()
 param claimsSystemPassword string
 
-var databases = ['claims_fnol', 'claims_fnol_dbos']
+var databases = ['claims_fnol', 'claims_agent']
 
 resource server 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: name
@@ -183,7 +183,7 @@ resource agentUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: vault
   name: 'agent-database-url'
   properties: {
-    value: 'postgresql://${agent}@${host}:5432/claims_fnol_dbos?sslmode=require'
+    value: 'postgresql://${agent}@${host}:5432/claims_agent?sslmode=require'
   }
 }
 
@@ -201,7 +201,7 @@ resource claimsRecordsUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: vault
   name: 'claims-records-database-url'
   properties: {
-    value: 'postgresql://${claimsSystem}@${host}:5432/claims_fnol_dbos?sslmode=require'
+    value: 'postgresql://${claimsSystem}@${host}:5432/claims_agent?sslmode=require'
   }
 }
 

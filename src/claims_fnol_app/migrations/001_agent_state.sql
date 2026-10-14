@@ -1,4 +1,4 @@
--- The agent's own state (Tier 2), in the agent's database (claims_fnol_dbos),
+-- The agent's own state (Tier 2), in the agent's database (claims_agent),
 -- beside the DBOS system tables the approval and escalation waits keep there.
 -- Never the claims system's database: the agent reaches the claims system only
 -- over MCP.

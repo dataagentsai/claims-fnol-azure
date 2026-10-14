@@ -42,12 +42,12 @@ Needs: the Homebrew PostgreSQL service running (`brew services list` shows
 `postgresql@16 started`; the scripts never start or stop it), `uv`, and a `.env`
 (copy `.env.example`; it holds the database URLs and `GROQ_API_KEY`, and is
 gitignored). The databases are `claims_fnol` (the claims system) and
-`claims_fnol_dbos` (the DBOS waits and the agent's own state). Each app logs in
+`claims_agent` (the agent's own state and DBOS's waits; renamed from claims_fnol_dbos on 14 Oct, F-116). Each app logs in
 as its own role (A4, `infra/sql/roles.sql`):
 
 | Role | Owns | In the other database |
 |---|---|---|
-| `claims_agent` | `claims_fnol_dbos`: `agent_state.*` and DBOS's `dbos.*` (DBOS makes its schema at launch, as this role) | no CONNECT on `claims_fnol` |
+| `claims_agent` | `claims_agent`: `agent_state.*` and DBOS's `dbos.*` (DBOS makes its schema at launch, as this role) | no CONNECT on `claims_fnol` |
 | `claims_system` | `claims_fnol` and its tables | CONNECT, and `SELECT` on `agent_state.approvals` only |
 | `claims_fnol` (admin) | nothing an app uses | makes the databases and the two roles; no app runs as it |
 
@@ -110,7 +110,7 @@ South India, the only Indian region that has it):
 | Log Analytics + Application Insights | PerGB2018, 30 days, 0.1 GB/day cap | Traces of every conversation, APIM's token metrics |
 | Container Apps environment + 2 apps | Consumption, min 0 / max 1 replicas | `agent` (public HTTPS), `claims-system` (internal only) |
 | 3 user-assigned managed identities | — | One per app and one for APIM; secrets read through them |
-| PostgreSQL flexible server | Burstable B1ms, 32 GB, no HA, 7-day backups | `claims_fnol` and `claims_fnol_dbos`; `vector` allowed |
+| PostgreSQL flexible server | Burstable B1ms, 32 GB, no HA, 7-day backups | `claims_fnol` and `claims_agent`; `vector` allowed |
 | Key Vault | Standard, RBAC, soft delete, no purge protection | Every secret; the overlay names them, never holds them |
 | API Management | Consumption | The model gateway: rate limit, token metrics, Content Safety, Groq |
 | Content Safety | F0 (free) | Screens each prompt and completion at APIM |
@@ -152,7 +152,7 @@ apps run a public placeholder image.
    `infra/hooks/entra-app.sh --yes`. See "Sign in on Azure" below.
    Last, the apps' own database logins (A4, `infra/hooks/db-roles.sh`): psql
    from this Mac, as the PostgreSQL administrator, runs `infra/sql/roles.sql`,
-   the same script dev-up runs. `claims_agent` gets `claims_fnol_dbos`,
+   the same script dev-up runs. `claims_agent` gets `claims_agent`,
    `claims_system` gets `claims_fnol` and `SELECT` on `agent_state.approvals`
    only. Every password (the administrator's and one per login) is made by azd
    (`secretOrRandomPassword`), kept in Key Vault and read from there without

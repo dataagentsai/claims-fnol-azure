@@ -388,9 +388,9 @@ def test_what_each_app_may_read_is_exactly_what_it_reads() -> None:
 
 DATABASE_URLS = [
     # (vault secret, the login it must name, its database)
-    ("agent-database-url", "agent", "claims_fnol_dbos"),
+    ("agent-database-url", "agent", "claims_agent"),
     ("claims-database-url", "claimsSystem", "claims_fnol"),
-    ("claims-records-database-url", "claimsSystem", "claims_fnol_dbos"),
+    ("claims-records-database-url", "claimsSystem", "claims_agent"),
 ]
 
 

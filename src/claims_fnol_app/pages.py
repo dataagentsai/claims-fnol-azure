@@ -64,7 +64,9 @@ button:disabled{opacity:.5;cursor:default}
 <header>
   <h1>Motor claims</h1>
   <span class="cid" id="cid">new conversation</span>
-  <form method="post" action="/signin/logout" style="margin-left:auto">
+  <button id="fresh" type="button"
+    style="margin-left:auto;padding:4px 10px;font-size:13px">new conversation</button>
+  <form method="post" action="/signin/logout">
     <button style="padding:4px 10px;font-size:13px">sign out</button></form>
 </header>
 <div id="log" aria-live="polite"></div>
@@ -103,16 +105,27 @@ function system(text){
   const el = document.createElement("div"); el.className = "sys"; el.textContent = text;
   log.appendChild(el); log.scrollTop = log.scrollHeight;
 }
-async function opening(){
+async function opening(fresh){
   // A reload loses the in-memory token; a stored login (the code flow) gives it back.
   if (!SESSION.token && !(await renewed())){ system("Not signed in. Go to /signin."); return; }
   try {
-    const res = await authed("/opening");
+    const res = await authed(fresh ? "/opening?new=1" : "/opening");
     const data = await res.json();
+    // F-117: the server says which conversation to continue (recent, or still
+    // waiting for a person) and gives back its earlier messages.
+    conversationId = data.conversation_id || null;
+    cid.textContent = conversationId || "new conversation";
+    if ((data.earlier || []).length){
+      system("Continuing your conversation");
+      for (const m of data.earlier) bubble(m.role === "user" ? "me" : "them", m.content);
+    }
     if (data.reply) bubble("them", data.reply, "opening · no model call");
     else system(data.error || "HTTP " + res.status);
   } catch (err) { system("Could not reach the claims assistant."); }
 }
+document.getElementById("fresh").addEventListener("click", () => {
+  log.textContent = ""; pending = null; opening(true);
+});
 form.addEventListener("submit", async e => {
   e.preventDefault();
   const text = input.value.trim();
@@ -146,8 +159,9 @@ opening();
 """
 )
 """The policyholder's chat. On load it asks `/opening` for their open claims and
-policies (P-OPEN, no model call); every message goes to `/chat` with its own
-delivery id, and the conversation id is echoed back."""
+policies (P-OPEN, no model call) and for the conversation to continue, if any
+(F-117); every message goes to `/chat` with its own delivery id, and the
+conversation id is echoed back. "New conversation" asks `/opening?new=1`."""
 
 DESK_PAGE = (
     """<!doctype html>

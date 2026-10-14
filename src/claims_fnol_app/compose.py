@@ -48,7 +48,7 @@ from claims_fnol import entrypoint as ep
 from claims_fnol.approvals import KEYS, PayoutWork, Policy
 from claims_fnol.config import Settings, resolve
 from claims_fnol.contracts import ModelResponse, ToolClient
-from claims_fnol_app import edge
+from claims_fnol_app import edge, resume
 from claims_fnol_app.settings import ROOT, setting
 from claims_fnol_app.usage import Counted
 from claims_fnol_app.waits import acting_for
@@ -81,7 +81,7 @@ async def migrate_agent_state(url: str) -> None:
 async def settings(planned: adapters.Plan) -> AsyncIterator[ConfigPort]:
     """The config port the overlay binds, with this agent's declared keys: the
     payout limit (A6) and the kill switch, `agent.enabled` (A13)."""
-    wired = {"config": {"keys": (*KEYS, switch.ENABLED)}}
+    wired = {"config": {"keys": (*KEYS, switch.ENABLED, resume.RESUME_HOURS)}}
     async with adapters.compose(planned, hooks=wired, ports=("secrets", "config")) as built:
         yield built["config"]
 
@@ -134,6 +134,9 @@ async def compose(
                 counted=counted,
                 usage_route=usage_route,
                 stored=built["state"].sessions,  # A2: the sign-in's refresh tokens
+                # F-117: the policyholder's newest conversation, resumed by /opening
+                finder=built["state"].checkpoints,
+                settings=limits,
             )
 
 

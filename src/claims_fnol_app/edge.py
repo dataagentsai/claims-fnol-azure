@@ -26,20 +26,22 @@ with one issuer's shape (F-30).
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 
 from agent_harness import identity as ident
 from agent_harness import serve
 from agent_harness.adapters.identity import Sessions
 from agent_harness.adapters.waits import Waits
-from agent_harness.contracts import SessionStore
+from agent_harness.config.settings import Settings
+from agent_harness.contracts import ConversationFinder, SessionStore
 from agent_harness.entrypoint import TurnAgent
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import BaseRoute, Mount, Route
 
-from claims_fnol_app import signin, signin_flow
+from claims_fnol_app import resume, signin, signin_flow
 from claims_fnol_app.pages import CHAT_PAGE, desk_router
 from claims_fnol_app.usage import Counted, Logged
 
@@ -53,14 +55,43 @@ def _policyholder(request: Request, sessions: Sessions) -> ident.Principal | Res
         return JSONResponse({"error": "the session token is not valid"}, status_code=401)
 
 
-def opening(agent: TurnAgent, sessions: Sessions) -> Route:
+def opening(
+    agent: TurnAgent,
+    sessions: Sessions,
+    finder: ConversationFinder | None = None,
+    settings: Settings | None = None,
+    clock: Callable[[], int] = lambda: int(time.time()),
+) -> Route:
+    """The greeting, and the conversation to continue (F-117): the newest one of
+    this policyholder's, if `resume.resumable` says so. `?new=1` (the page's
+    "New conversation") skips it."""
+
     async def show(request: Request) -> Response:
         who = _policyholder(request, sessions)
         if isinstance(who, Response):
             return who
         if not who.customer_id:
             return JSONResponse({"error": "this session is not a policyholder's"}, 403)
-        return JSONResponse({"reply": await agent.opening(who.as_customer())})
+        continued = None
+        if finder is not None and request.query_params.get("new") != "1":
+            hours = (
+                settings.get(resume.RESUME_HOURS)
+                if settings is not None
+                else resume.RESUME_HOURS.default
+            )
+            continued = resume.resumable(
+                await finder.newest_for(who.customer_id),
+                customer_id=who.customer_id,
+                now=clock(),
+                within_hours=hours,
+            )
+        return JSONResponse(
+            {
+                "reply": await agent.opening(who.as_customer()),
+                "conversation_id": continued.conversation_id if continued else None,
+                "earlier": resume.earlier(continued),
+            }
+        )
 
     return Route("/opening", show)
 
@@ -89,6 +120,8 @@ def build(
     counted: Counted,
     usage_route: bool,
     stored: SessionStore | None = None,
+    finder: ConversationFinder | None = None,
+    settings: Settings | None = None,
 ) -> Starlette:
     """The whole app. One agent, one set of waits, one identity. `stored` keeps
     the code flow's refresh tokens (`state.session_key`); without it, none is."""
@@ -105,7 +138,7 @@ def build(
         approver=held.approver,
         desk_pages=(desk_router,),
     )
-    routes: list[BaseRoute] = [opening(agent, sessions)]
+    routes: list[BaseRoute] = [opening(agent, sessions, finder, settings)]
     if sessions.signer is not None:
         routes += [
             Route("/signin", signin.signin_page, methods=["GET"]),

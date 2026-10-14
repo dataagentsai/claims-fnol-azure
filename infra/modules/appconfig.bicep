@@ -15,6 +15,11 @@
 //                                 escalations at the desk go on. Only the agent
 //                                 reads it. A provision writes this value back
 //                                 (FINDINGS F-88).
+//     conversation.resume_hours  (label dev)  24  the policyholder's newest
+//                                 conversation is continued when written within
+//                                 this many hours, or always while a payout or a
+//                                 hand-off waits; 0 = only those (F-117). Only the
+//                                 agent reads it.
 //     online_sample_rate   1.0    the share of turns the online checks judge
 //                                 (evaluators.yaml, position `online`); not
 //                                 read yet (F-77)
@@ -51,6 +56,11 @@ param agentEnabled bool = true
 @description('A string, as Bicep has no decimal literals.')
 param onlineSampleRate string = '1.0'
 
+@description('Hours within which the newest conversation is continued (F-117); 0 = only while a payout or hand-off waits.')
+@minValue(0)
+@maxValue(720)
+param resumeHours int = 24
+
 var dataReader = '516239f1-63e1-4d78-a4de-a74fb236a071' // App Configuration Data Reader
 var dataOwner = '5ae67dd6-50cb-40e7-96ff-dc2bfa4b606b' // App Configuration Data Owner
 
@@ -81,6 +91,15 @@ resource killSwitch 'Microsoft.AppConfiguration/configurationStores/keyValues@20
   name: 'agent.enabled$${label}'
   properties: {
     value: agentEnabled ? 'true' : 'false'
+    contentType: 'text/plain'
+  }
+}
+
+resource resumeWithin 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-03-01' = {
+  parent: store
+  name: 'conversation.resume_hours$${label}'
+  properties: {
+    value: string(resumeHours)
     contentType: 'text/plain'
   }
 }
