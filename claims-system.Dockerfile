@@ -6,11 +6,13 @@
 #
 #   docker buildx build -f claims-system.Dockerfile \
 #     --build-context harness=../reference-agent/packages/agent-harness \
+#     --build-context evalharness=../eval-harness-framework \
 #     --build-context worlds=../clean-ai-engineering/gates/motor-claims-fnol/worlds \
 #     --build-context stacks=../clean-ai-engineering/stacks \
 #     -t ghcr.io/<owner>/claims-fnol-claims-system:<tag> .
 #
 #   harness  the agent_harness library (a path dependency in pyproject.toml)
+#   evalharness  the eval shapes and port the harness re-exports (a path dependency)
 #   worlds   the FNOL world the seed reads (claims_system.__main__.WORLD,
 #            ../clean-ai-engineering/gates/motor-claims-fnol/worlds/...)
 #   stacks   the stack profiles harness-profile.yaml extends; the azure overlay
@@ -38,6 +40,9 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/app/venv
 COPY --from=harness . /app/reference-agent/packages/agent-harness
+# The eval shapes agent_harness.evals re-exports (a path dependency, D2).
+COPY --from=evalharness pyproject.toml README.md LICENSE /app/eval-harness-framework/
+COPY --from=evalharness src /app/eval-harness-framework/src
 WORKDIR /app/claims-fnol-azure
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-editable

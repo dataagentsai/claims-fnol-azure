@@ -9,6 +9,7 @@
 #
 #   $GITHUB_WORKSPACE/claims-fnol-azure      this repository (every `run` step works here)
 #   $GITHUB_WORKSPACE/reference-agent        the harness, packages/agent-harness (a path dependency)
+#   $GITHUB_WORKSPACE/eval-harness-framework the eval shapes the harness re-exports (a path dependency)
 #   $GITHUB_WORKSPACE/agenttwin              the simulator (a dev path dependency; the gates' runner)
 #   $GITHUB_WORKSPACE/clean-ai-engineering   tools/gates.py, the yardstick, the AOAS, stacks/
 #   $GITHUB_WORKSPACE/ai-harness-catalog     AHC: capabilities and tools/resolve.js (node)
@@ -35,6 +36,7 @@ concurrency:
 
 env:
   REFERENCE_AGENT_REF: main
+  EVAL_HARNESS_FRAMEWORK_REF: main
   AGENTTWIN_REF: main
   CLEAN_AI_ENGINEERING_REF: main
   AI_HARNESS_CATALOG_REF: main
@@ -90,6 +92,12 @@ jobs:
           repository: dataagentsai/reference-agent
           ref: ${{ env.REFERENCE_AGENT_REF }}
           path: reference-agent
+      - name: Check out eval-harness-framework
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/eval-harness-framework
+          ref: ${{ env.EVAL_HARNESS_FRAMEWORK_REF }}
+          path: eval-harness-framework
       - name: Check out agenttwin
         uses: actions/checkout@v5
         with:
@@ -209,6 +217,12 @@ jobs:
           repository: dataagentsai/reference-agent
           ref: ${{ env.REFERENCE_AGENT_REF }}
           path: reference-agent
+      - name: Check out eval-harness-framework
+        uses: actions/checkout@v5
+        with:
+          repository: dataagentsai/eval-harness-framework
+          ref: ${{ env.EVAL_HARNESS_FRAMEWORK_REF }}
+          path: eval-harness-framework
       - name: Check out clean-ai-engineering
         uses: actions/checkout@v5
         with:
@@ -233,6 +247,7 @@ jobs:
           file: claims-fnol-azure/agent.Dockerfile
           build-contexts: |
             harness=reference-agent/packages/agent-harness
+            evalharness=eval-harness-framework
             stacks=clean-ai-engineering/stacks
           push: ${{ env.PUSH == 'true' }}
           tags: |
@@ -251,6 +266,7 @@ jobs:
           file: claims-fnol-azure/claims-system.Dockerfile
           build-contexts: |
             harness=reference-agent/packages/agent-harness
+            evalharness=eval-harness-framework
             worlds=clean-ai-engineering/gates/motor-claims-fnol/worlds
             stacks=clean-ai-engineering/stacks
           push: ${{ env.PUSH == 'true' }}

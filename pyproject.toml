@@ -43,6 +43,8 @@ dev = [
 [tool.uv.sources]
 # Local paths while the three repositories move together, as the reference does.
 agent-harness = { path = "../reference-agent/packages/agent-harness", editable = true }
+# agent-harness depends on it (agent_harness.evals re-exports its shapes, D2).
+evalharness = { path = "../eval-harness-framework", editable = true }
 agenttwin = { path = "../agenttwin", editable = true }
 
 [build-system]
