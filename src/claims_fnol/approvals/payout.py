@@ -173,40 +173,42 @@ class PayoutWork:
 
     @activity.defn(name=ASSESS)
     async def assess(self, ask: Ask) -> Assessment:
-        who = (await self.acting_for(ask.customer_id)).model_copy(update={"grant": ask.id})
-        key = stored_key(_keyed(ask))
-        claim = await _claim(self.tools, ask.args.get("claim_id"), who, key)
-        if not isinstance(claim, dict):
-            return Assessment(args=ask.args, reason=None, failed=claim.text)
-        amount = claim.get("approved_amount")
-        args = {**ask.args, "amount": None if amount is None else str(amount)}
-        refused = not_requestable(claim, self.policy)
-        if refused is not None:
-            return Assessment(args=args, reason=None, failed=refused)
-        # One read of the limit per decision (A6, AHC-0003), recorded on the
-        # decision's span: a change in App Configuration applies to the next
-        # payout, and each decision shows which limit it used.
-        limit = self.policy.automatic_limit()
-        attributes = {"agent.approval.id": ask.id, LIMIT_ATTRIBUTE: str(limit)}
-        with tel.span("agent.approval.assess", **attributes):
-            reason = requires_approval(claim, limit)
-        return Assessment(
-            args=args, reason=reason, approver=POLICY_APPROVER, decided_against=judged(claim)
-        )
+        with tel.work_scope(ask.conversation_id, ask.id):
+            who = (await self.acting_for(ask.customer_id)).model_copy(update={"grant": ask.id})
+            key = stored_key(_keyed(ask))
+            claim = await _claim(self.tools, ask.args.get("claim_id"), who, key)
+            if not isinstance(claim, dict):
+                return Assessment(args=ask.args, reason=None, failed=claim.text)
+            amount = claim.get("approved_amount")
+            args = {**ask.args, "amount": None if amount is None else str(amount)}
+            refused = not_requestable(claim, self.policy)
+            if refused is not None:
+                return Assessment(args=args, reason=None, failed=refused)
+            # One read of the limit per decision (A6, AHC-0003), recorded on the
+            # decision's span: a change in App Configuration applies to the next
+            # payout, and each decision shows which limit it used.
+            limit = self.policy.automatic_limit()
+            attributes = {"agent.approval.id": ask.id, LIMIT_ATTRIBUTE: str(limit)}
+            with tel.span("agent.approval.assess", **attributes):
+                reason = requires_approval(claim, limit)
+            return Assessment(
+                args=args, reason=reason, approver=POLICY_APPROVER, decided_against=judged(claim)
+            )
 
     @activity.defn(name=CARRY_OUT)
     async def carry_out(self, approval: Approval) -> CarriedOut:
-        who = await self.acting_for(approval.customer_id)
-        now = _attempted_at()
-        with tel.span("agent.approval.carry_out", **{"agent.approval.id": approval.id}):
-            changed = await self._changed(approval, who)
-            if changed is not None:
-                return CarriedOut(ok=False, stale=True, text=changed)
-            try:
-                result = await carry_out(approval, who, self.tools, policy=self.policy, now=now)
-            except ApprovalError as exc:
-                return CarriedOut(ok=False, text=str(exc))
-        return _outcome_of(result)
+        with tel.work_scope(approval.conversation_id, approval.id):
+            who = await self.acting_for(approval.customer_id)
+            now = _attempted_at()
+            with tel.span("agent.approval.carry_out", **{"agent.approval.id": approval.id}):
+                changed = await self._changed(approval, who)
+                if changed is not None:
+                    return CarriedOut(ok=False, stale=True, text=changed)
+                try:
+                    result = await carry_out(approval, who, self.tools, policy=self.policy, now=now)
+                except ApprovalError as exc:
+                    return CarriedOut(ok=False, text=str(exc))
+            return _outcome_of(result)
 
     async def _changed(self, approval: Approval, who: Identity) -> str | None:
         """Re-read the claim before the grant is spent: what moved since it was
