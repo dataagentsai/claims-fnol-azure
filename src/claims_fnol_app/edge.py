@@ -132,7 +132,6 @@ def build(
         # (FINDINGS F-30), the local and Keycloak issuers' as theirs.
         verify=sessions.verify,
         chat_page=CHAT_PAGE,
-        # The DBOS desks have the Temporal desks' shape; serve types the latter (F-20).
         desk=held.desk,
         approvals=held.approvals,
         approver=held.approver,

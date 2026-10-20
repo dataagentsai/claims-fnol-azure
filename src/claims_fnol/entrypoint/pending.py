@@ -26,6 +26,7 @@ from agent_harness.state import Conversation
 
 from claims_fnol import approvals as ap
 from claims_fnol.contracts import (
+    Approval,
     Approvals,
     ApprovalState,
     Completed,
@@ -137,32 +138,11 @@ class ApprovalFlow:
                 return Completed(reply=CARRYING_OUT), conversation
 
             cleared = conversation.model_copy(update={"pending_approval_id": None})
-            if state is ApprovalState.REFUSED:
-                refused = Completed(
-                    reply="A claims handler reviewed this payout and could not authorise it."
-                )
-                return refused, cleared.recording(Completed(reply=""))
-            if state is ApprovalState.EXPIRED:
-                expired = Failed(
-                    customer_message=(
-                        "That authorisation is no longer valid — "
-                        "please ask again and I will raise it afresh."
-                    ),
-                    detail=f"approval {approval.id} expired before anyone decided",
-                )
-                return expired, cleared
             if state is ApprovalState.STALE:
                 fresh = approval.superseded_by
                 return await self._asked_again(fresh, cleared, identity, run_id, tools)
-            if state is ApprovalState.FAILED:
-                return Failed(customer_message=PAYOUT_FAILED, detail=approval.result or ""), cleared
-            done = Completed(
-                reply=(
-                    "A claims handler authorised that payout, and it has been made to the "
-                    "account on your policy."
-                )
-            )
-            return done, cleared
+            result, blank = told(approval)
+            return result, cleared.recording(Completed(reply="")) if blank else cleared
 
     async def _asked_again(
         self,
@@ -189,6 +169,49 @@ class ApprovalFlow:
         if fresh.state is ApprovalState.FAILED:
             return Completed(reply=STALE_CLOSED), cleared
         return await self.resume(following, identity, run_id, tools)
+
+
+def told(approval: Approval) -> tuple[TurnResult, bool]:
+    """What the customer is told about a settled approval, and whether the turn
+    records a blank reply after it (an outcome a person chose, not a fault).
+
+    Only `done` says the money moved. Any other state, a state added later
+    included, is told as what it is or falls to the failure reply, never
+    through to the success one (it did before `withdrawn`, 20 Oct 2026).
+    """
+    match approval.state:
+        case ApprovalState.DONE:
+            return Completed(
+                reply=(
+                    "A claims handler authorised that payout, and it has been made to the "
+                    "account on your policy."
+                )
+            ), False
+        case ApprovalState.REFUSED:
+            return Completed(
+                reply="A claims handler reviewed this payout and could not authorise it."
+            ), True
+        case ApprovalState.WITHDRAWN:
+            return Completed(
+                reply=(
+                    "A claims handler withdrew that payout request before it was decided, "
+                    "so nothing has been paid. Ask again if you still need it."
+                )
+            ), True
+        case ApprovalState.EXPIRED:
+            expired = Failed(
+                customer_message=(
+                    "That authorisation is no longer valid — "
+                    "please ask again and I will raise it afresh."
+                ),
+                detail=f"approval {approval.id} expired before anyone decided",
+            )
+            return expired, False
+        case ApprovalState.FAILED:
+            return Failed(customer_message=PAYOUT_FAILED, detail=approval.result or ""), False
+        case _:
+            detail = f"approval {approval.id} ended {approval.state.value}"
+            return Failed(customer_message=PAYOUT_FAILED, detail=detail), False
 
 
 __all__ = ["ApprovalFlow", "NoApprovals", "PendingWork"]
