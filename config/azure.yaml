@@ -29,6 +29,8 @@ bindings:
   telemetry:
     adapter: azure-monitor-otel
     connection_string: {key_vault: appinsights-connection-string}
+  cost_ledger:
+    adapter: per-task-meter
   model:
     adapter: apim-ai-gateway
     base_url: {env: APIM_GROQ_BASE_URL}

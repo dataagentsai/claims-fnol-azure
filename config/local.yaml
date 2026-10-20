@@ -27,6 +27,8 @@ bindings:
   telemetry:
     adapter: console
     why: traces stay in this process; Application Insights arrives in Tier 4
+  cost_ledger:
+    adapter: per-task-meter
   model:
     adapter: groq-direct
     why: Groq straight from this Mac on its free tier; APIM in front of it is Tier 3

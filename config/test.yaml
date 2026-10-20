@@ -19,6 +19,8 @@ bindings:
   telemetry:
     adapter: console
     why: spans stay in memory, where a test can read them
+  cost_ledger:
+    adapter: per-task-meter
   model:
     adapter: scripted
     why: the app's tests script the model — no network, no key, no cost

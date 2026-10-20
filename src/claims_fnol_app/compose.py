@@ -123,6 +123,7 @@ async def compose(
                 escalations=waits.escalations,
                 deliveries=built["state"].requests,
                 config=config,
+                ledger=built.get("cost_ledger"),
             )
             # A13: every turn asks `agent.enabled` first; false is the paused reply.
             agent = switch.Switched(built_agent, limits, reply=binding.PAUSED)

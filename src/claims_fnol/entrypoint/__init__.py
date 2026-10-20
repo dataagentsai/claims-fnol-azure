@@ -29,6 +29,7 @@ from agent_harness import loop as agent_loop
 from agent_harness import requests as req
 from agent_harness import telemetry as tel
 from agent_harness.cost import Meter
+from agent_harness.cost.port import CostLedger
 from agent_harness.entrypoint import ending
 from agent_harness.entrypoint.persist import TurnPersister, agree_on_durability, delivered
 from agent_harness.loop import freshness
@@ -394,6 +395,7 @@ def build(
     metering: Callable[[], Meter] | None = None,
     fresh_for_s: int | None = binding.FRESH_FOR_S,
     synthetic_customers: frozenset[str] = frozenset(),
+    ledger: CostLedger | None = None,
 ) -> Agent:
     """The composition root.
 
@@ -411,7 +413,11 @@ def build(
             f"configured router rules {config.router_rules_version!r}, loaded {loaded!r}"
         )
     if metering is None and config is not None:
-        metering = partial(Meter, config.model, ceiling_usd=config.budgets.max_cost_usd)
+        # Each turn's meter records into the composed cost ledger, when one is
+        # bound (the `cost_ledger` port, T-048), with the attempt that answered.
+        metering = partial(
+            Meter, config.model, ceiling_usd=config.budgets.max_cost_usd, ledger=ledger
+        )
     if metering is not None:
         metering()  # an unpriced model fails here, at startup — never mid-conversation
     return Agent(
