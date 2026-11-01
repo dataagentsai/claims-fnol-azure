@@ -1,6 +1,8 @@
 # claims-fnol-azure
 
-A motor insurer's claims agent (first notice of loss) on Azure, with Pydantic AI as the model layer — T-099 in clean-ai-engineering/TODO.md.
+Open source (Apache 2.0) · Website: [cleandataengineering.ai/projects/claims-fnol-azure](https://cleandataengineering.ai/projects/claims-fnol-azure/) · Part of [Clean Data Engineering](https://cleandataengineering.ai/)
+
+A motor insurer's claims agent (first notice of loss) on Azure, with Pydantic AI as the model layer.
 
 Specs: `../clean-ai-engineering/drafts/examples/motor-claims-fnol.aoas.yaml` (what it does), `../clean-ai-engineering/stacks/azure.yaml` (what it runs on), `harness-profile.yaml` (this agent's own choices).
 
