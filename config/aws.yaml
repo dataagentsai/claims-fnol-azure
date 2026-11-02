@@ -1,0 +1,69 @@
+# AWS (T-123, step R2): the AWS profile's adapters, every one — nothing here
+# leaves the profile (../harness-profile.aws.yaml), so nothing says `why`.
+#
+# Nothing here names a deployed resource. Each {env: NAME} is an output of the
+# Terraform (R3), set under the same name in the agent task's environment; each
+# {aws_secret: name} is a secret the Terraform creates. The task reads them with
+# its own IAM role: no key is held anywhere.
+apiVersion: harness-overlay/v1
+environment: aws
+profile: ../harness-profile.aws.yaml
+
+bindings:
+  secrets:
+    adapter: secrets-manager
+    region: {env: AWS_REGION}
+  # A6 and A13 as on Azure: the automatic payout limit and the kill switch
+  # (`agent.enabled`), re-read every 45 s; the claims system reads the same
+  # document (config/claims-system/aws.yaml).
+  config:
+    adapter: appconfig
+    application: {env: APPCONFIG_APPLICATION}
+    environment: {env: APPCONFIG_ENVIRONMENT}
+    profile: {env: APPCONFIG_PROFILE}
+    region: {env: AWS_REGION}
+  # Plain OTLP to the ADOT sidecar on localhost (the adapter's default address).
+  telemetry:
+    adapter: otel-to-cloudwatch
+  cost_ledger:
+    adapter: per-task-meter
+  # Signed with the task role (SigV4): the gateway holds Groq's key, not us.
+  model:
+    adapter: agentcore-gateway
+    base_url: {env: AGENTCORE_GATEWAY_URL}
+  state:
+    adapter: rds-postgresql
+    url: {aws_secret: claims-fnol/agent-database-url}
+    session_key: {aws_secret: claims-fnol/agent-session-key}
+  records:
+    adapter: postgres
+    url: {aws_secret: claims-fnol/agent-database-url}
+  identity:
+    adapter: cognito
+    region: {env: AWS_REGION}
+    user_pool_id: {env: COGNITO_USER_POOL_ID}
+    audience: {env: COGNITO_APP_CLIENT_ID}
+    # The policyholder id: a claim the user pool's pre-token-generation trigger
+    # adds to access tokens; the claims system reads the same name.
+    holder_claim: {env: HOLDER_CLAIM}
+    # A Cognito group, as Entra's app role was: what a desk handler may do.
+    role_scopes:
+      desk.handler: [escalations:read, escalations:review, approvals:read, approvals:decide]
+    # A1: the claims system's token. Cognito has no on-behalf-of grant, so the
+    # agent's own issuer signs it, with one key every task shares; the app
+    # publishes the public half at /.well-known/jwks.json.
+    far_end_audience: claims-system
+    token_issuer_url: {env: AGENT_ISSUER_URL}
+    signing_key: {aws_secret: claims-fnol/agent-signing-key}
+    party: claims-fnol
+    worker_scopes: [claims:read, payouts:write]
+  tool_runtime:
+    adapter: mcp-client
+    url: {env: CLAIMS_MCP_URL}
+  approval:
+    adapter: dbos-workflows
+    url: {aws_secret: claims-fnol/agent-database-url}
+    name: claims-fnol
+
+app:
+  usage_route: false

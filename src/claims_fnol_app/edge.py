@@ -12,7 +12,8 @@ Around it, three routes of this app's own:
                   in both
     /.well-known/jwks.json
                   that signer's public keys, so the claims system can verify
-                  the tokens it mints for it (A1); only where there is a signer
+                  the tokens it mints for it (A1); where there is a signer,
+                  or (AWS) the agent's own issuer's keys
     /opening      what a signed-in policyholder is shown first: their open claims
                   and policies, with no model call (P-OPEN)
     /dev/usage    model calls and tokens so far, where the overlay asks for it
@@ -145,6 +146,10 @@ def build(
             Route("/signin/logout", signin.signout, methods=["POST"]),
             Route("/.well-known/jwks.json", published(sessions.signer.jwks), methods=["GET"]),
         ]
+    if sessions.signer is None and sessions.jwks:
+        # AWS (T-123): no sign-in page, but the agent's own issuer signs the
+        # claims system's tokens, so its public keys are published the same way.
+        routes.append(Route("/.well-known/jwks.json", published(sessions.jwks), methods=["GET"]))
     code_flow = None
     if sessions.login is not None and sessions.sealer is not None:
         code_flow = signin_flow.CodeFlow(sessions.login, sessions.sealer, sessions.verify, stored)

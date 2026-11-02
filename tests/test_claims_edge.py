@@ -80,7 +80,7 @@ def mint(
             claims["roles"] = ["payouts.issue"]
         else:
             claims["scp"] = " ".join(scopes)
-    else:  # the agent app's local issuer: `jti`, `scp` a list
+    else:  # the agent's own issuer (local, and AWS): `jti`, `scp` a list
         claims |= {"iss": issuer or LOCAL_ISSUER, "aud": audience or "claims-system"}
         claims |= {"jti": uuid.uuid4().hex, "azp": "claims-fnol"}
         claims["scp"] = ["claims:read", "payouts:write"] if workflow else list(scopes)
@@ -119,7 +119,11 @@ async def claims_system(environment: str) -> AsyncIterator[str]:
         env = pytest.MonkeyPatch()
         env.setenv("AZURE_TENANT_ID", TENANT)  # what the claims container is given
         env.setenv("CLAIMS_SYSTEM_APP_ID", CLAIMS_APP)
-        env.setenv("HOLDER_CLAIM", HOLDER_CLAIM)
+        # Entra names the holder by its extension attribute; the agent's own
+        # issuer (local, and AWS, where Cognito has no on-behalf-of) writes `customer_id`.
+        env.setenv("HOLDER_CLAIM", HOLDER_CLAIM if environment == "azure" else ident.CLAIM_CUSTOMER)
+        env.setenv("AGENT_ISSUER_URL", LOCAL_ISSUER)  # AWS: whom the claims task trusts
+        env.setenv("AGENT_JWKS_URI", "https://agent.test/.well-known/jwks.json")
         async with st.Store.open(url) as store, authorisation(planned, hooks=keys) as authorise:
             env.undo()
             server = srv.build(store, authorise=authorise, approvals=records)
@@ -264,7 +268,7 @@ ROWS: list[tuple[str, dict[str, Any] | None, str, dict[str, Any], dict[str, Any]
 
 
 @pytest.mark.discharges("AAC-0057", "AAC-0106", "AHC-0099")
-@pytest.mark.parametrize("environment", ["local", "azure"])
+@pytest.mark.parametrize("environment", ["local", "azure", "aws"])
 @pytest.mark.parametrize(
     ("row", "made", "tool", "args", "meta", "expected"), ROWS, ids=[r[0] for r in ROWS]
 )
@@ -316,7 +320,12 @@ def test_the_azure_overlay_cannot_bind_the_believing_adapter(tmp_path: Path) -> 
         adapters.plan(copy)
 
 
-OVERLAYS = [("local", "local-dev"), ("azure", "entra-id"), ("test", "asserted")]
+OVERLAYS = [
+    ("local", "local-dev"),
+    ("azure", "entra-id"),
+    ("aws", "agent-issuer"),
+    ("test", "asserted"),
+]
 
 
 @pytest.mark.discharges("AHC-0004")

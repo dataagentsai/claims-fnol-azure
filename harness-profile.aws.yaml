@@ -1,0 +1,39 @@
+# The motor-claims FNOL agent on AWS (T-123, step R2).
+#
+# Extends this agent's own profile, so every decision it makes is kept in one
+# place (harness-profile.yaml), and rebinds only the ports, to the adapters the
+# AWS stack names (../clean-ai-engineering/stacks/aws.yaml). The agent's code,
+# its AOAS, its world and its scenarios do not change: only the binding does.
+#
+# A profile has one `extends`, so the AWS stack is restated here by adapter name
+# only; each line names the stack binding it comes from. The Azure bindings'
+# own notes (x_dev, x_verify) are overwritten where this file sets one.
+apiVersion: harness-profile/v1
+
+extends: harness-profile.yaml
+
+bindings:
+  model:
+    adapter: agentcore-gateway
+    x_why: "stacks/aws.yaml bindings.model: AgentCore Gateway, Groq behind it in dev, Bedrock later"
+  state:
+    adapter: rds-postgresql
+    x_why: "stacks/aws.yaml bindings.state: RDS for PostgreSQL, not Aurora Serverless v2 (DBOS keeps a connection open)"
+  records:
+    adapter: postgres
+    x_why: "the same RDS database as state"
+  identity:
+    adapter: cognito
+    x_why: "stacks/aws.yaml bindings.identity: Cognito user pool; the agent's own issuer for the claims system's token (Cognito has no on-behalf-of grant)"
+  secrets:
+    adapter: secrets-manager
+    x_why: "stacks/aws.yaml bindings.secrets: Secrets Manager, or Parameter Store (free) in dev, through the same adapter"
+  telemetry:
+    adapter: otel-to-cloudwatch
+    x_why: "stacks/aws.yaml bindings.telemetry: OTLP to the ADOT collector sidecar, which sends to X-Ray and CloudWatch"
+  config:
+    adapter: appconfig
+    x_why: "stacks/aws.yaml bindings.config: AWS AppConfig"
+  approval:
+    adapter: dbos-workflows
+    x_why: "stacks/aws.yaml bindings.approval: DBOS on the same RDS database"

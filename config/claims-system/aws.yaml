@@ -1,0 +1,29 @@
+# The claims system on AWS (T-123, step R2): how it checks its caller (A1).
+#
+# Tokens the agent's own issuer signed for this system's audience
+# (config/aws.yaml: identity.far_end_audience), checked against the keys the
+# agent publishes at /.well-known/jwks.json: Cognito has no on-behalf-of grant,
+# so this, not Cognito, is whom the claims system trusts for agent calls.
+#
+# Each {env: NAME} is an output of the Terraform (R3), set in the claims task.
+apiVersion: harness-overlay/v1
+environment: aws
+profile: ../../harness-profile.aws.yaml
+
+bindings:
+  secrets:
+    adapter: environment-settings
+    why: nothing this overlay reads is a secret (an issuer URL, an audience, an endpoint); the database URL reaches the task as a Secrets Manager reference (Terraform)
+  # A6: the same AppConfig document as the agent, read with this task's own role.
+  config:
+    adapter: appconfig
+    application: {env: APPCONFIG_APPLICATION}
+    environment: {env: APPCONFIG_ENVIRONMENT}
+    profile: {env: APPCONFIG_PROFILE}
+    region: {env: AWS_REGION}
+  authorise:
+    adapter: agent-issuer
+    issuer_url: {env: AGENT_ISSUER_URL}
+    audience: claims-system
+    jwks_uri: {env: AGENT_JWKS_URI}
+    holder_claim: {env: HOLDER_CLAIM}

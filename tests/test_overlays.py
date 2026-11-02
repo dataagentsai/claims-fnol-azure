@@ -3,8 +3,10 @@
 1. Each overlay resolves against the harness profile, through the library's
    registry, with every adapter it names existing — Azure's included, which
    cannot run until Tier 3 has made its resources.
-2. The Azure overlay is the profile: every port bound as the stack binds it, so
-   nothing in it says `why`. The others say why wherever they leave it.
+2. The Azure overlay is the profile, and the AWS overlay is the AWS profile
+   (`harness-profile.aws.yaml`, which extends this agent's own): every port
+   bound as its stack binds it, so nothing in either says `why`. The others say
+   why wherever they leave the profile.
 3. No module of the composition root branches on the environment's name or a
    vendor's: `CLAIMS_FNOL_ENV` is read in one place, to pick the file.
 4. The claims system is composed the same way from its own overlays
@@ -72,6 +74,21 @@ OVERLAYS: list[tuple[str, dict[str, str]]] = [
             "approval": "dbos-workflows",
         },
     ),
+    (
+        "aws",
+        {
+            "secrets": "secrets-manager",
+            "config": "appconfig",
+            "telemetry": "otel-to-cloudwatch",
+            "cost_ledger": "per-task-meter",
+            "model": "agentcore-gateway",
+            "state": "rds-postgresql",
+            "records": "postgres",
+            "identity": "cognito",
+            "tool_runtime": "mcp-client",
+            "approval": "dbos-workflows",
+        },
+    ),
 ]
 
 
@@ -92,17 +109,19 @@ def test_an_overlay_leaves_the_profile_only_saying_why(name: str, expected: dict
     for port, bound in planned.bound.items():
         left = stack.get(port, {}).get("adapter") not in (None, bound.adapter.name)
         assert bool(bound.why) is left, f"{name}.{port}: why={bound.why!r}, left={left}"
-    if name == "azure":
-        assert not any(b.why for b in planned.bound.values()), "Azure is the profile itself"
+    if name in ("azure", "aws"):
+        assert not any(b.why for b in planned.bound.values()), f"{name} is its profile itself"
 
 
-def test_the_overlays_are_the_three_environments() -> None:
-    assert sorted(p.stem for p in CONFIG.glob("*.yaml")) == ["azure", "local", "test"]
-    with pytest.raises(SystemExit, match="overlays: azure, local, test"):
+def test_the_overlays_are_the_four_environments() -> None:
+    assert sorted(p.stem for p in CONFIG.glob("*.yaml")) == ["aws", "azure", "local", "test"]
+    with pytest.raises(SystemExit, match="overlays: aws, azure, local, test"):
         overlay("staging")
 
 
-BRANCH = re.compile(r"""==\s*["'](?:local|test|azure|groq|openai|entra|dbos|temporal)["']""")
+BRANCH = re.compile(
+    r"""==\s*["'](?:local|test|azure|aws|groq|openai|entra|cognito|dbos|temporal)["']"""
+)
 
 
 @pytest.mark.discharges("AHC-0004")

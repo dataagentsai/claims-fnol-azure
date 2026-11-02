@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "agent-harness"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "../reference-agent/packages/agent-harness" }
 dependencies = [
     { name = "evalharness" },
@@ -38,7 +38,10 @@ azure = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "extra == 'claude'", specifier = ">=2.3" },
     { name = "azure-monitor-opentelemetry", marker = "extra == 'azure'", specifier = ">=1.6" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.40" },
+    { name = "dbos", marker = "extra == 'aws'", specifier = ">=1.0" },
     { name = "dbos", marker = "extra == 'azure'", specifier = ">=1.0" },
     { name = "evalharness", editable = "../eval-harness-framework" },
     { name = "fastapi", specifier = ">=0.115" },
@@ -51,17 +54,18 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.27" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.9" },
+    { name = "pydantic-ai-slim", extras = ["openai"], marker = "extra == 'aws'", specifier = ">=1.0" },
     { name = "pydantic-ai-slim", extras = ["openai"], marker = "extra == 'azure'", specifier = ">=1.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "starlette", specifier = ">=1.6" },
     { name = "temporalio", specifier = ">=1.18" },
 ]
-provides-extras = ["azure"]
+provides-extras = ["claude", "azure", "aws"]
 
 [[package]]
 name = "agenttwin"
-version = "0.13.0"
+version = "0.13.1"
 source = { editable = "../agenttwin" }
 dependencies = [
     { name = "httpx2" },
@@ -647,14 +651,19 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "azure-ai-evaluation", marker = "extra == 'azure'", specifier = "==1.18.9" },
+    { name = "azure-identity", marker = "extra == 'appinsights'", specifier = "==1.26.0" },
+    { name = "azure-monitor-query", marker = "extra == 'appinsights'", specifier = "==2.0.0" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.40" },
     { name = "deepeval", marker = "extra == 'deepeval'", specifier = "==4.3.1" },
     { name = "langchain-community", marker = "extra == 'ragas'", specifier = "==0.4.1" },
+    { name = "llm-cost-explainer", marker = "extra == 'cost'", git = "https://github.com/basantchoudhary/llm-cost-explainer" },
     { name = "openai", marker = "extra == 'judge'", specifier = ">=1.50" },
+    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.39" },
     { name = "presidio-analyzer", marker = "extra == 'presidio'", specifier = "==2.2.364" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ragas", marker = "extra == 'ragas'", specifier = "==0.4.3" },
 ]
-provides-extras = ["judge", "azure", "deepeval", "ragas", "presidio"]
+provides-extras = ["judge", "azure", "deepeval", "ragas", "presidio", "appinsights", "aws", "otel", "cost"]
 
 [package.metadata.requires-dev]
 dev = [

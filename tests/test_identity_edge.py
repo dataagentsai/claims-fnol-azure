@@ -4,8 +4,9 @@ The library's contract table (reference-agent `tests/test_adapter_contracts.py`,
 `test_the_edges_verify_through_the_identity_port`) holds every identity adapter
 to the same rows at `serve` and the desk. This table holds *this* app to them,
 with each overlay's own identity settings: the local test sign-in
-(`config/local.yaml`, `local-dev`) and Entra (`config/azure.yaml`, `entra-id`,
-its app role `desk.handler` mapped to the desk's scopes by `role_scopes`).
+(`config/local.yaml`, `local-dev`), Entra (`config/azure.yaml`, `entra-id`,
+its app role `desk.handler` mapped to the desk's scopes by `role_scopes`) and
+Cognito (`config/aws.yaml`, `cognito`, the group `desk.handler` mapped the same).
 
 Each session is written in its issuer's own shape — Keycloak-style `scp` lists
 and `jti` locally, Entra's `scp` string, `roles` and `uti` on Azure — and signed
@@ -30,6 +31,7 @@ from agent_harness.adapters.identity import Sessions
 from agent_harness.adapters.waits import Waits
 from agent_harness.identity.local import KID, LocalIssuer
 from agent_harness.state import InMemoryCheckpointStore
+from cryptography.hazmat.primitives import serialization
 
 from claims_fnol.binding import POLICYHOLDER_SCOPES
 from claims_fnol_app import edge, signin
@@ -46,6 +48,18 @@ REFERENCES = {
     "HOLDER_CLAIM": "extn.customer_id",
     "ENTRA_REDIRECT_URI": "https://agent.test/signin/callback",
     "agent-session-key": "test-session-secret",
+    # AWS (T-123): a Cognito user pool, and the agent's own issuer's shared key.
+    "AWS_REGION": "ap-south-1",
+    "COGNITO_USER_POOL_ID": "ap-south-1_FNOLTEST",
+    "COGNITO_APP_CLIENT_ID": "fnol-app-client",
+    "AGENT_ISSUER_URL": "https://agent.test",
+    "claims-fnol/agent-signing-key": LocalIssuer()
+    ._key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    .decode(),
 }
 
 
@@ -53,7 +67,7 @@ def _resolved(value: Any) -> Any:
     """An overlay's `{env: NAME}` or `{key_vault: name}` replaced by this test's
     value (no secrets port)."""
     if adapters.is_reference(value):
-        return REFERENCES[value.get("env") or value["key_vault"]]
+        return REFERENCES[value.get("env") or value.get("key_vault") or value["aws_secret"]]
     return value
 
 
@@ -73,6 +87,22 @@ def mint(environment: str, sessions: Sessions, *, handler: bool) -> str:
         user = next(u for u in signin.USERS if (u.policyholder_id is None) == handler)
         return signin.mint(sessions.signer, user)
     now = int(time.time())
+    if sessions.issuer.url.startswith("https://cognito-idp."):  # Cognito's access-token shape
+        cognito: dict[str, Any] = {
+            "iss": sessions.issuer.url,
+            "client_id": sessions.issuer.audience,
+            "token_use": "access",
+            "sub": "login-asha" if handler else "login-rohan",
+            "jti": uuid.uuid4().hex,
+            "iat": now,
+            "exp": now + 600,
+        }
+        if handler:
+            cognito["cognito:groups"] = ["desk.handler"]
+        else:
+            cognito["scope"] = " ".join(sorted(POLICYHOLDER_SCOPES))
+            cognito[REFERENCES["HOLDER_CLAIM"]] = "PH-1001"
+        return jwt.encode(cognito, ENTRA_KEY._key, algorithm="RS256", headers={"kid": KID})
     claims: dict[str, Any] = {
         "iss": f"https://login.microsoftonline.com/{TENANT}/v2.0",
         "aud": sessions.issuer.audience,
@@ -114,7 +144,7 @@ class _Agent:
         raise AssertionError("no turn is run here")
 
 
-OVERLAYS = ["local", "azure"]
+OVERLAYS = ["local", "azure", "aws"]
 # (row, a handler's session or a policyholder's, method, path, the status)
 ROWS: list[tuple[str, bool, str, str, int]] = [
     (
@@ -182,3 +212,34 @@ async def test_the_desk_role_grants_what_the_local_handler_holds(environment: st
         held = sessions.verify(mint(environment, sessions, handler=True)).scopes
     assert held >= signin.HANDLER_SCOPES
     assert not held & POLICYHOLDER_SCOPES
+
+
+@pytest.mark.parametrize(
+    ("environment", "keys", "signin"),
+    [("local", True, True), ("azure", False, False), ("aws", True, False)],
+)
+async def test_the_edge_publishes_its_issuers_keys_and_never_a_sign_in_page_it_cannot_back(
+    environment: str, keys: bool, signin: bool
+) -> None:
+    """A1 on AWS: the agent's own issuer signs the claims system's tokens, so its
+    public keys are published as the local issuer's are; but it can mint for the
+    far end only, never a session, so no test sign-in page appears."""
+    async with sessions_of(environment) as sessions:
+        queue = _EmptyQueue()
+        waits = Waits(approvals=queue, escalations=queue, approver=None, desk=None)  # type: ignore[arg-type]
+        app = edge.build(
+            _Agent(),  # type: ignore[arg-type]
+            waits,
+            sessions,
+            counted=Counted(inner=None),  # type: ignore[arg-type]
+            usage_route=False,
+        )
+        async with httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url="http://fnol.test"
+        ) as http:
+            published = await http.get("/.well-known/jwks.json")
+            page = await http.get("/signin")
+    assert (published.status_code == 200) is keys, environment
+    if keys:
+        assert published.json()["keys"][0]["alg"] == "RS256"
+    assert (page.status_code == 200) is signin, environment
