@@ -57,6 +57,14 @@ bindings:
     signing_key: {aws_secret: claims-fnol/agent-signing-key}
     party: claims-fnol
     worker_scopes: [claims:read, payouts:write]
+    # A2: the policyholder's browser sign-in through the pool's own domain (the
+    # code flow with PKCE and a nonce, as on Azure), the app client's secret, and
+    # the cookies sealed with a key derived from session_key.
+    login_domain: {env: COGNITO_DOMAIN}
+    client_secret: {aws_secret: claims-fnol/cognito-client-secret}
+    login_redirect_uri: {env: COGNITO_REDIRECT_URI}
+    login_scopes: [claims-fnol/claims.read, claims-fnol/claims.write]
+    session_key: {aws_secret: claims-fnol/agent-session-key}
   tool_runtime:
     adapter: mcp-client
     url: {env: CLAIMS_MCP_URL}

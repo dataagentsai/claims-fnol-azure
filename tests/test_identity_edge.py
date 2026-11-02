@@ -53,6 +53,10 @@ REFERENCES = {
     "COGNITO_USER_POOL_ID": "ap-south-1_FNOLTEST",
     "COGNITO_APP_CLIENT_ID": "fnol-app-client",
     "AGENT_ISSUER_URL": "https://agent.test",
+    "COGNITO_DOMAIN": "https://fnol-test.auth.ap-south-1.amazoncognito.com",
+    "claims-fnol/cognito-client-secret": "test-secret",
+    "COGNITO_REDIRECT_URI": "https://agent.test/signin/callback",
+    "claims-fnol/agent-session-key": "test-session-secret",
     "claims-fnol/agent-signing-key": LocalIssuer()
     ._key.private_bytes(
         serialization.Encoding.PEM,
